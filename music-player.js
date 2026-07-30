@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.3.4';
+  var BUILD_TIME = '2026-07-30-v1.3.5';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -2513,7 +2513,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.3.4</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.3.5</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3367,7 +3367,7 @@
 
       if (STATE.lyricsFullInject) {
         // 模式B：全部歌词 + 标注当前10行范围
-        result += '完整歌词（标注【>>>...<<<】范围）：\n';
+        result += '完整歌词（【>>>...<<<】为user正在听到的范围）：\n';
         var rangeStart = Math.max(0, curIdx - 5);
         var rangeEnd = Math.min(STATE.lyrics.length - 1, curIdx + 4);
         for (var i = 0; i < STATE.lyrics.length; i++) {
@@ -3380,7 +3380,7 @@
         // 模式A（默认）：仅注入当前前后各5行
         var start = Math.max(0, curIdx - 5);
         var end = Math.min(STATE.lyrics.length, curIdx + 6);
-        result += '歌词：\n';
+        result += '歌词（user正在听到的范围）：\n';
         for (var j = start; j < end; j++) {
           result += (STATE.lyrics[j].text || '...') + '\n';
         }
