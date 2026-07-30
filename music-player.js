@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.0.16-search_all-only';
+  var BUILD_TIME = '2026-07-30-v1.0.17';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -3249,7 +3249,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.0.16',
+    version: '1.0.17',
 
     apps: [{
       id: 'roche-music-player-home',
