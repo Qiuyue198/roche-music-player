@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.4.0';
+  var BUILD_TIME = '2026-07-30-v1.4.2';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -2513,7 +2513,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.4.0</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.4.2</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3186,7 +3186,13 @@
               refs.loginStatus.className = 'rmp-login-status';
               break;
             case 802:
-              refs.loginStatus.textContent = '待确认，请在手机上点击确认登录';
+              // 显示调试信息：查看后端返回的各检测方式结果
+              var debugInfo = '';
+              if (result.debug && Array.isArray(result.debug)) {
+                var methods = result.debug.map(function(d) { return (d.method || '?') + ':' + (d.code || d.error || '?'); }).join(', ');
+                debugInfo = ' [' + methods + ']';
+              }
+              refs.loginStatus.textContent = '待确认，请在手机上点击确认登录' + debugInfo;
               refs.loginStatus.className = 'rmp-login-status';
               break;
             default:
@@ -3194,7 +3200,7 @@
               refs.loginStatus.className = 'rmp-login-status';
               break;
             case 803:
-              refs.loginStatus.textContent = '登录成功！';
+              refs.loginStatus.textContent = '登录成功！' + (result.method ? ' (' + result.method + ')' : '');
               refs.loginStatus.className = 'rmp-login-status success';
               if (result.cookie) {
                 STATE.cookie = result.cookie;
@@ -3396,7 +3402,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.4.0',
+    version: '1.4.2',
 
     apps: [{
       id: 'roche-music-player-home',
