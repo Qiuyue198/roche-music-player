@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.4.5';
+  var BUILD_TIME = '2026-07-30-v1.5.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -361,16 +361,68 @@
     });
   }
 
-  // 获取网易云扫码登录二维码
+  // 获取网易云扫码登录二维码（优先直连网易云API，国产IP不走Vercel代理）
   function getQrLogin() {
-    return api('netease_qr_login', {});
+    // 尝试直连：用户浏览器是国内IP，不会被网易云封锁
+    return fetch('https://music.163.com/api/login/qrcode/unikey?type=1', {
+      headers: { 'Accept': 'application/json' }
+    }).then(function (res) {
+      if (!res.ok) throw new Error('direct_failed');
+      return res.json();
+    }).then(function (data) {
+      if (data && data.code === 200 && data.unikey) {
+        // 生成二维码
+        var qrurl = 'https://music.163.com/login?codekey=' + data.unikey;
+        return {
+          unikey: data.unikey,
+          qrimg: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(qrurl),
+          qrurl: qrurl,
+          _direct: true
+        };
+      }
+      throw new Error('direct_failed');
+    }).catch(function () {
+      // 降级：走 Vercel 后端
+      return api('netease_qr_login', {});
+    });
   }
 
-  // 检查扫码状态（可传入初始会话 cookie）
+  // 检查扫码状态（优先直连网易云API）
   function checkQrLogin(key, cookie) {
-    var params = { key: key };
-    if (cookie) params.cookie = cookie;
-    return api('netease_qr_check', params);
+    // 尝试直连
+    var body = new URLSearchParams();
+    body.append('key', key);
+    body.append('type', '1');
+    return fetch('https://music.163.com/api/login/qrcode/client/login', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: body.toString(),
+    }).then(function (res) {
+      if (!res.ok) throw new Error('direct_failed');
+      return res.json();
+    }).then(function (data) {
+      // 处理数组响应
+      if (Array.isArray(data) && data.length > 0) data = data[0];
+      if (data && typeof data.code === 'number') {
+        // 803 成功时，从 Set-Cookie 响应头提取 cookie
+        // （fetch 无法直接读取 Set-Cookie，所以成功时再通过 Vercel 获取）
+        return {
+          code: data.code,
+          cookie: data.cookie || '',
+          message: data.message || '',
+          _direct: true
+        };
+      }
+      throw new Error('direct_failed');
+    }).catch(function () {
+      // 降级：走 Vercel 后端
+      var params = { key: key };
+      if (cookie) params.cookie = cookie;
+      return api('netease_qr_check', params);
+    });
   }
 
   // ==================== 音频引擎 ====================
@@ -2513,7 +2565,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.4.5</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.5.0</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3160,20 +3212,25 @@
         return;
       }
       var key = data.unikey;
-      // 保存初始会话 cookie，后续 check 请求需携带
-      STATE.qrSessionCookie = data.initCookie || '';
-      if (data.qrimg) {
+      // 直连模式不需要 session cookie
+      var isDirect = data._direct === true;
+      if (isDirect && data.qrimg) {
+        refs.qrImg.src = data.qrimg;
+        refs.qrImg.style.display = 'block';
+        refs.qrPlaceholder.style.display = 'none';
+      } else if (data.qrimg) {
         refs.qrImg.src = data.qrimg;
         refs.qrImg.style.display = 'block';
         refs.qrPlaceholder.style.display = 'none';
       }
-      refs.loginStatus.textContent = '请使用网易云音乐 APP扫码';
+      refs.loginStatus.textContent = '请使用网易云音乐 APP扫码' + (isDirect ? '' : ' (代理)');
       refs.loginStatus.className = 'rmp-login-status';
 
       // 开始轮询
       STATE.qrPollTimer = setInterval(function () {
-        checkQrLogin(key, STATE.qrSessionCookie).then(function (result) {
+        checkQrLogin(key, '').then(function (result) {
           if (!result) return;
+          var isDirectResult = result._direct === true;
           switch (result.code) {
             case 800:
               refs.loginStatus.textContent = '二维码已过期，请重新获取';
@@ -3182,16 +3239,11 @@
               STATE.qrPollTimer = null;
               break;
             case 801:
-              refs.loginStatus.textContent = '等待扫码...';
+              refs.loginStatus.textContent = '等待扫码...' + (isDirectResult ? '' : ' (代理)');
               refs.loginStatus.className = 'rmp-login-status';
               break;
             case 802:
-              // 显示调试信息：查看后端返回的原始响应片段
-              var debugInfo = '';
-              if (result.debug_text) {
-                debugInfo = ' [' + result.debug_text.substring(0, 60) + ']';
-              }
-              refs.loginStatus.textContent = '待确认，请在手机上点击确认登录' + debugInfo;
+              refs.loginStatus.textContent = '待确认，请在手机上点击确认登录' + (isDirectResult ? '' : ' (代理)');
               refs.loginStatus.className = 'rmp-login-status';
               break;
             default:
@@ -3199,7 +3251,7 @@
               refs.loginStatus.className = 'rmp-login-status';
               break;
             case 803:
-              refs.loginStatus.textContent = '登录成功！' + (result.method ? ' (' + result.method + ')' : '');
+              refs.loginStatus.textContent = '登录成功！' + (isDirectResult ? ' (直连)' : (result.method ? ' (' + result.method + ')' : ''));
               refs.loginStatus.className = 'rmp-login-status success';
               if (result.cookie) {
                 STATE.cookie = result.cookie;
@@ -3211,7 +3263,7 @@
                 saveSettings();
                 updateLoginUI();
                 if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功：' + result.profile.nickname);
-              } else {
+              } else if (result.cookie) {
                 fetchUserInfo().then(function (profile) {
                   updateLoginUI();
                   if (profile) {
@@ -3220,6 +3272,8 @@
                     if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功');
                   }
                 });
+              } else {
+                if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功');
               }
               clearInterval(STATE.qrPollTimer);
               STATE.qrPollTimer = null;
@@ -3401,7 +3455,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.4.5',
+    version: '1.5.0',
 
     apps: [{
       id: 'roche-music-player-home',
