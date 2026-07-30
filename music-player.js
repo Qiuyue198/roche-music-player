@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.0.17';
+  var BUILD_TIME = '2026-07-30-v1.1.0-poll';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -130,7 +130,7 @@
   // 搜索音乐
   function searchMusic(keywords, source, limit) {
     limit = limit || 20;
-    // 登录网易云后：直接用原生网易云搜索（不走GD音乐库）
+    // 登录网易云后：直接用原生网易云搜索
     if (STATE.cookie && source === 'netease') {
       return api('netease_native_search', { keywords: keywords, limit: limit }).then(function (data) {
         var songs = data.songs || data.results || [];
@@ -146,14 +146,9 @@
       });
     }
     function normalizeSong(s) {
-      // 兼容旧版Worker（id="netease:5257138"）和新版Worker（id="5257138"）
-      // GD API 需要纯数字 track_id，不能带 source: 前缀
       var rawId = String(s.id || s.mediaId || '');
-      // 去掉 "source:" 前缀（旧版Worker格式）
       var cleanId = rawId.indexOf(':') >= 0 ? rawId.split(':').pop() : rawId;
-      // GD API 返回的 artist 可能是数组（joox/bilibili 返回 ["歌手A","歌手B"]），转成字符串
       var artist = Array.isArray(s.artist) ? s.artist.join(' / ') : (s.artist || s.singer || '');
-      // pic_id / lyric_id 可能缺 https: 前缀（bilibili 返回 //i0.hdslb.com/...）
       function fixProtocol(val) {
         if (!val) return val;
         val = String(val);
@@ -163,20 +158,16 @@
       var picId = fixProtocol(s.picId || s.pic_id || s.picId) || cleanId;
       var lyricId = fixProtocol(s.lyricId || s.lyric_id || s.lyricId) || cleanId;
       return Object.assign({}, s, {
-        id: cleanId,
-        artist: artist,
-        singer: artist,
-        picId: picId,
-        lyricId: lyricId,
+        id: cleanId, artist: artist, singer: artist,
+        picId: picId, lyricId: lyricId,
         platform: s.platform || s.source || source
       });
     }
-    // 统一走 search_all（单源搜索不稳定，全平台搜索始终正常），按扩展音源开关过滤
-    return api('search_all', { keywords: keywords, limit: limit }).then(function (data) {
+    // 从 search_all 结果中提取歌曲，按扩展音源开关过滤
+    function extractFromAll(data) {
       var all = data.all || {};
       var results = [];
       if (STATE.useExtendedSources) {
-        // 扩展音源开启：按请求的 source 返回对应结果
         if (source === 'all') {
           if (data.merged && data.merged.length) return data.merged.map(normalizeSong);
           ['netease', 'joox', 'bilibili'].forEach(function (p) {
@@ -186,11 +177,36 @@
           if (all[source]) all[source].forEach(function (s) { results.push(normalizeSong(s)); });
         }
       } else {
-        // 扩展音源关闭：只取网易云结果
         if (all.netease) all.netease.forEach(function (s) { results.push(normalizeSong(s)); });
       }
       return results;
-    });
+    }
+    // 并发轮询搜索：同时发 3 个请求，间隔 600ms 重试，直到有结果
+    function pollSearchAll(retries) {
+      retries = retries || 0;
+      var MAX = 4;
+      // 第一轮发1个，后续轮发2个并发
+      var count = retries === 0 ? 1 : 2;
+      var reqs = [];
+      for (var i = 0; i < count; i++) {
+        reqs.push(api('search_all', { keywords: keywords, limit: limit }));
+      }
+      return Promise.all(reqs).then(function (responses) {
+        for (var j = 0; j < responses.length; j++) {
+          var songs = extractFromAll(responses[j]);
+          if (songs && songs.length > 0) return songs;
+        }
+        if (retries < MAX) {
+          return new Promise(function (resolve) {
+            setTimeout(function () {
+              resolve(pollSearchAll(retries + 1));
+            }, 600);
+          });
+        }
+        return [];
+      });
+    }
+    return pollSearchAll(0);
   }
 
   // 获取播放 URL（br 由后端映射 standard/high/lossless -> 320/740/999）
@@ -3126,46 +3142,47 @@
     updateDisclaimerLockUI();
   }
 
-  // 保存设置到 roche.storage
+  // 保存设置到 roche.storage（全部异步，返回 Promise）
   function saveSettings() {
-    if (!STATE.roche || !STATE.roche.storage) return;
-    try {
-      STATE.roche.storage.set('rmp_backend', STATE.backend);
-      STATE.roche.storage.set('rmp_default_source', STATE.defaultSource);
-      STATE.roche.storage.set('rmp_quality', STATE.quality);
-      STATE.roche.storage.set('rmp_volume', String(STATE.volume));
-      STATE.roche.storage.set('rmp_play_mode', STATE.playMode);
-      STATE.roche.storage.set('rmp_island_top', String(STATE.islandTop));
-      STATE.roche.storage.set('rmp_island_visible', STATE.islandVisible ? '1' : '0');
-      STATE.roche.storage.set('rmp_island_scroll_mode', STATE.islandScrollMode);
-      STATE.roche.storage.set('rmp_agreed_disclaimer', STATE.hasAgreedDisclaimer ? '1' : '0');
-      STATE.roche.storage.set('rmp_extended_sources', STATE.useExtendedSources ? '1' : '0');
-      if (STATE.cookie) {
-        STATE.roche.storage.set('rmp_cookie', STATE.cookie);
-      }
-      if (STATE.userProfile) {
-        try { STATE.roche.storage.set('rmp_user_profile', JSON.stringify(STATE.userProfile)); } catch (e) {}
-      }
-    } catch (e) {}
+    if (!STATE.roche || !STATE.roche.storage) return Promise.resolve();
+    var sets = [
+      STATE.roche.storage.set('rmp_backend', STATE.backend),
+      STATE.roche.storage.set('rmp_default_source', STATE.defaultSource),
+      STATE.roche.storage.set('rmp_quality', STATE.quality),
+      STATE.roche.storage.set('rmp_volume', String(STATE.volume)),
+      STATE.roche.storage.set('rmp_play_mode', STATE.playMode),
+      STATE.roche.storage.set('rmp_island_top', String(STATE.islandTop)),
+      STATE.roche.storage.set('rmp_island_visible', STATE.islandVisible ? '1' : '0'),
+      STATE.roche.storage.set('rmp_island_scroll_mode', STATE.islandScrollMode),
+      STATE.roche.storage.set('rmp_agreed_disclaimer', STATE.hasAgreedDisclaimer ? '1' : '0'),
+      STATE.roche.storage.set('rmp_extended_sources', STATE.useExtendedSources ? '1' : '0')
+    ];
+    if (STATE.cookie) {
+      sets.push(STATE.roche.storage.set('rmp_cookie', STATE.cookie));
+    }
+    if (STATE.userProfile) {
+      sets.push(STATE.roche.storage.set('rmp_user_profile', JSON.stringify(STATE.userProfile)));
+    }
+    return Promise.all(sets).catch(function () {});
   }
 
   // 从 roche.storage 加载设置
   function loadSettings(roche) {
     if (!roche || !roche.storage) return Promise.resolve();
     return Promise.all([
-      Promise.resolve(roche.storage.get('rmp_backend')),
-      Promise.resolve(roche.storage.get('rmp_default_source')),
-      Promise.resolve(roche.storage.get('rmp_quality')),
-      Promise.resolve(roche.storage.get('rmp_volume')),
-      Promise.resolve(roche.storage.get('rmp_play_mode')),
-      Promise.resolve(roche.storage.get('rmp_cookie')),
-      Promise.resolve(roche.storage.get('rmp_user_profile')),
-      Promise.resolve(roche.storage.get('rmp_island_top')),
-      Promise.resolve(roche.storage.get('rmp_island_visible')),
-      Promise.resolve(roche.storage.get('rmp_island_scroll_mode')),
-      Promise.resolve(roche.storage.get('rmp_playlist')),
-      Promise.resolve(roche.storage.get('rmp_agreed_disclaimer')),
-      Promise.resolve(roche.storage.get('rmp_extended_sources'))
+      roche.storage.get('rmp_backend'),
+      roche.storage.get('rmp_default_source'),
+      roche.storage.get('rmp_quality'),
+      roche.storage.get('rmp_volume'),
+      roche.storage.get('rmp_play_mode'),
+      roche.storage.get('rmp_cookie'),
+      roche.storage.get('rmp_user_profile'),
+      roche.storage.get('rmp_island_top'),
+      roche.storage.get('rmp_island_visible'),
+      roche.storage.get('rmp_island_scroll_mode'),
+      roche.storage.get('rmp_playlist'),
+      roche.storage.get('rmp_agreed_disclaimer'),
+      roche.storage.get('rmp_extended_sources')
     ]).then(function (results) {
       if (results[0]) STATE.backend = results[0];
       if (results[1]) STATE.defaultSource = results[1];
@@ -3249,7 +3266,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.0.17',
+    version: '1.1.0',
 
     apps: [{
       id: 'roche-music-player-home',
