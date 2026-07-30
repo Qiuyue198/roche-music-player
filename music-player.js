@@ -223,12 +223,12 @@
     // 根据来源分发
     if (source === 'netease') {
       return pollSingle('netease', 0, 10).then(function (songs) {
-        return filterByLyrics(songs);
+        return filterPlayable(songs);
       });
     }
     if (source === 'joox') {
       return pollSingle('joox', 0, 4).then(function (songs) {
-        return filterByLyrics(songs);
+        return filterPlayable(songs);
       });
     }
     // 全平台：search_all + 登录时额外原生网易云
@@ -257,45 +257,44 @@
         var key = s.id + '|' + s.platform;
         if (!seen[key]) { seen[key] = true; merged.push(s); }
       });
-      return filterByLyrics(merged);
+      return filterPlayable(merged);
     });
   }
 
-  // 过滤无歌词歌曲：并发获取歌词，仅保留有歌词的结果
+  // 过滤不可播放/无歌词歌曲：并发检查歌词和播放链接，只保留两者都有的
   // 排序：netease 优先于 joox
-  function filterByLyrics(songs) {
+  function filterPlayable(songs) {
     if (!songs || songs.length === 0) return Promise.resolve([]);
     var checks = songs.map(function (song) {
       var lyricId = song.lyricId || song.id;
       var source = song.platform || 'joox';
-      return getLyric(lyricId, source).then(function (data) {
-        if (data.lyric && data.lyric.trim().length > 10) song._hasLyric = true;
-        else song._hasLyric = false;
+      var cleanId = String(song.id).indexOf(':') >= 0 ? String(song.id).split(':').pop() : String(song.id);
+      // 并发检查歌词和播放链接
+      return Promise.all([
+        getLyric(lyricId, source).then(function (d) { return d.lyric && d.lyric.trim().length > 10; }).catch(function () { return false; }),
+        getSongUrl(cleanId, source).then(function (url) { return !!url; }).catch(function () { return false; })
+      ]).then(function (r) {
+        song._hasLyric = r[0];
+        song._hasUrl = r[1];
+        song._playable = r[0] && r[1];
         return song;
-      }).catch(function () { song._hasLyric = false; return song; });
+      });
     });
+    function process(all) {
+      var playable = all.filter(function (s) { return s._playable; });
+      playable.sort(function (a, b) {
+        if (a.platform === 'netease' && b.platform !== 'netease') return -1;
+        if (a.platform !== 'netease' && b.platform === 'netease') return 1;
+        return 0;
+      });
+      playable.forEach(function (s) { delete s._hasLyric; delete s._hasUrl; delete s._playable; });
+      return playable;
+    }
     return Promise.allSettled ? Promise.allSettled(checks).then(function (results) {
-      var withLyrics = [];
-      results.forEach(function (r) {
-        if (r.status === 'fulfilled' && r.value._hasLyric) withLyrics.push(r.value);
-      });
-      withLyrics.sort(function (a, b) {
-        if (a.platform === 'netease' && b.platform !== 'netease') return -1;
-        if (a.platform !== 'netease' && b.platform === 'netease') return 1;
-        return 0;
-      });
-      withLyrics.forEach(function (s) { delete s._hasLyric; });
-      return withLyrics;
-    }) : Promise.all(checks).then(function (all) {
-      var withLyrics = all.filter(function (s) { return s._hasLyric; });
-      withLyrics.sort(function (a, b) {
-        if (a.platform === 'netease' && b.platform !== 'netease') return -1;
-        if (a.platform !== 'netease' && b.platform === 'netease') return 1;
-        return 0;
-      });
-      withLyrics.forEach(function (s) { delete s._hasLyric; });
-      return withLyrics;
-    });
+      var all = [];
+      results.forEach(function (r) { if (r.status === 'fulfilled') all.push(r.value); });
+      return process(all);
+    }) : Promise.all(checks).then(process);
   }
 
   // 获取播放 URL（统一走 Vercel 后端，支持所有音源）
