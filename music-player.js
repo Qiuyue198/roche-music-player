@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.2.1';
+  var BUILD_TIME = '2026-07-30-v1.2.2';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -338,9 +338,11 @@
     return api('netease_qr_login', {});
   }
 
-  // 检查扫码状态
-  function checkQrLogin(key) {
-    return api('netease_qr_check', { key: key });
+  // 检查扫码状态（可传入初始会话 cookie）
+  function checkQrLogin(key, cookie) {
+    var params = { key: key };
+    if (cookie) params.cookie = cookie;
+    return api('netease_qr_check', params);
   }
 
   // ==================== 音频引擎 ====================
@@ -777,8 +779,8 @@
 }\
 /* 关闭按钮（胶囊状悬浮球上的 X）——加大触摸区域，始终可见 */\
 .rmp-island-close {\
-  width: 26px;\
-  height: 26px;\
+  width: 20px;\
+  height: 20px;\
   flex-shrink: 0;\
   display: flex;\
   align-items: center;\
@@ -786,24 +788,25 @@
   border-radius: 50%;\
   background: transparent;\
   cursor: pointer;\
-  opacity: 0.5;\
-  transition: opacity 0.2s ease, background 0.2s ease, transform 0.15s ease;\
+  opacity: 0.3;\
+  transition: opacity 0.25s ease, background 0.2s ease, transform 0.15s ease;\
 }\
 .rmp-island-close:hover {\
-  opacity: 1;\
-  background: rgba(255,80,80,0.35);\
+  opacity: 0.7;\
+  background: rgba(255,80,80,0.25);\
 }\
 .rmp-island-close:active {\
   transform: scale(0.85);\
 }\
 .rmp-island-close svg {\
-  width: 13px;\
-  height: 13px;\
+  width: 11px;\
+  height: 11px;\
   fill: #fff;\
+  opacity: 0.85;\
 }\
 .rmp-island-play-btn {\
-  width: 26px;\
-  height: 26px;\
+  width: 20px;\
+  height: 20px;\
   flex-shrink: 0;\
   display: flex;\
   align-items: center;\
@@ -811,23 +814,22 @@
   border-radius: 50%;\
   background: transparent;\
   cursor: pointer;\
-  opacity: 0.55;\
+  opacity: 0.3;\
   border: none;\
   padding: 0;\
-  transition: opacity 0.2s ease, background 0.2s ease, transform 0.15s ease;\
+  transition: opacity 0.25s ease, transform 0.15s ease;\
 }\
 .rmp-island-play-btn:hover {\
-  opacity: 1;\
-  background: rgba(194,12,12,0.2);\
+  opacity: 0.7;\
 }\
 .rmp-island-play-btn:active {\
   transform: scale(0.85);\
 }\
 .rmp-island-play-btn svg {\
-  width: 14px;\
-  height: 14px;\
+  width: 11px;\
+  height: 11px;\
   fill: #fff;\
-  opacity: 0.85;\
+  opacity: 0.8;\
 }\
 .rmp-island-expanded-content {\
   padding: 0 14px 10px;\
@@ -2267,7 +2269,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.2.1</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.2.2</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -2902,6 +2904,8 @@
         return;
       }
       var key = data.unikey;
+      // 保存初始会话 cookie，后续 check 请求需携带
+      STATE.qrSessionCookie = data.initCookie || '';
       if (data.qrimg) {
         refs.qrImg.src = data.qrimg;
         refs.qrImg.style.display = 'block';
@@ -2912,7 +2916,7 @@
 
       // 开始轮询
       STATE.qrPollTimer = setInterval(function () {
-        checkQrLogin(key).then(function (result) {
+        checkQrLogin(key, STATE.qrSessionCookie).then(function (result) {
           if (!result) return;
           switch (result.code) {
             case 800:
@@ -3115,7 +3119,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.2.0',
+    version: '1.2.2',
 
     apps: [{
       id: 'roche-music-player-home',
