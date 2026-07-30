@@ -129,6 +129,21 @@
   // 搜索音乐
   function searchMusic(keywords, source, limit) {
     limit = limit || 20;
+    // 登录网易云后：直接用原生网易云搜索（不走GD音乐库）
+    if (STATE.cookie && source === 'netease') {
+      return api('netease_native_search', { keywords: keywords, limit: limit }).then(function (data) {
+        var songs = data.songs || data.results || [];
+        return songs.map(function (s) {
+          var cleanId = String(s.id);
+          return Object.assign({}, s, {
+            id: cleanId,
+            picId: s.picId || s.cover || cleanId,
+            lyricId: s.lyricId || cleanId,
+            platform: 'netease'
+          });
+        });
+      });
+    }
     function normalizeSong(s) {
       // 兼容旧版Worker（id="netease:5257138"）和新版Worker（id="5257138"）
       // GD API 需要纯数字 track_id，不能带 source: 前缀
@@ -182,6 +197,12 @@
   function getSongUrl(id, source) {
     // 防御性：去掉可能的 source: 前缀
     var cleanId = String(id).indexOf(':') >= 0 ? String(id).split(':').pop() : String(id);
+    // 登录网易云后：直接用原生网易云播放链接
+    if (STATE.cookie && (source === 'netease')) {
+      return api('netease_native_url', { id: cleanId, br: STATE.quality }).then(function (data) {
+        return data.url || '';
+      });
+    }
     // 扩展音源走 GD API 直连
     if (STATE.useExtendedSources && (source === 'joox' || source === 'bilibili')) {
       // bilibili 只支持 128/320，joox 走标准 br 映射
@@ -221,6 +242,12 @@
     if (!lyricId) return Promise.resolve({ lyric: '', tlyric: '' });
     // 去掉可能的 source: 前缀
     var cleanId = String(lyricId).indexOf(':') >= 0 ? String(lyricId).split(':').pop() : String(lyricId);
+    // 登录网易云后：直接用原生网易云歌词
+    if (STATE.cookie && (source === 'netease')) {
+      return api('netease_native_lyric', { id: cleanId }).then(function (data) {
+        return { lyric: data.lyric || '', tlyric: data.tlyric || '' };
+      });
+    }
     // 扩展音源走 GD API 直连（joox），bilibili 走 Vercel 字幕接口
     if (STATE.useExtendedSources && (source === 'joox' || source === 'bilibili')) {
       // bilibili 通过 Vercel 获取 B站 CC 字幕并转 LRC
@@ -3202,7 +3229,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.0.14',
+    version: '1.0.15',
 
     apps: [{
       id: 'roche-music-player-home',
