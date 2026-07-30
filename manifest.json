@@ -4,7 +4,7 @@
   "version": "1.2.0",
   "description": "音乐播放器，全平台搜索+歌词过滤，网易云扫码登录",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/yechen1844/roche-music-player/5985d024b922eadbe6d46b70bc656d3f8798d992/music-player.js",
+  "entry": "https://raw.githubusercontent.com/yechen1844/roche-music-player/341713b05d617774cf1a8b45b6f842060da66678/music-player.js",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
