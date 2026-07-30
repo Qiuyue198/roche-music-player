@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.2.2';
+  var BUILD_TIME = '2026-07-30-v1.2.3';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -47,6 +47,8 @@
     islandScrollMode: 'title',
     // 灵动岛最小化（本地状态，不持久化）
     islandMinimized: false,
+    // 灵动岛主动关闭（关闭按钮触发），关闭后contextProvider停止注入，可被点歌唤醒
+    islandClosed: false,
     initialized: false
   };
 
@@ -1146,17 +1148,19 @@
       // 如果设置中关闭了灵动岛显示，则不显示
       if (!STATE.islandVisible) return;
       STATE.islandEl.classList.remove('rmp-island-hidden');
-      // 播放歌曲时自动从最小化恢复
+      // 播放歌曲时自动从最小化恢复，并重置关闭状态
       unminimizeIsland();
+      STATE.islandClosed = false;
     }
   }
 
-  // 隐藏灵动岛
+  // 隐藏灵动岛（关闭按钮触发，同时停止context注入）
   function hideIsland() {
     if (STATE.islandEl) {
       STATE.islandEl.classList.add('rmp-island-hidden');
       STATE.islandEl.classList.remove('rmp-island-expanded');
       STATE.islandExpanded = false;
+      STATE.islandClosed = true;
     }
   }
 
@@ -2269,7 +2273,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.2.2</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.2.3</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -2585,6 +2589,7 @@
     function onResetIsland() {
       STATE.islandVisible = true;
       STATE.islandMinimized = false;
+      STATE.islandClosed = false;
       refs.islandVisibleToggle.classList.add('on');
       if (STATE.islandEl) {
         STATE.islandEl.style.display = '';
@@ -3074,6 +3079,8 @@
   // ==================== ContextProvider ====================
 
   function contextProvider(ctx) {
+    // 灵动岛被主动关闭，不注入歌曲信息
+    if (STATE.islandClosed) return null;
     // 没有在听歌返回 null
     if (!STATE.currentSong || !STATE.audio) return null;
 
@@ -3119,7 +3126,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.2.2',
+    version: '1.2.3',
 
     apps: [{
       id: 'roche-music-player-home',
