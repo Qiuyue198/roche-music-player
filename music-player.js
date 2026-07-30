@@ -211,6 +211,12 @@
     if (!picId) return Promise.resolve('');
     // 去掉可能的 source: 前缀
     var cleanId = String(picId).indexOf(':') >= 0 ? String(picId).split(':').pop() : String(picId);
+    // 扩展音源走 GD API 直连
+    if (STATE.useExtendedSources && (source === 'joox' || source === 'bilibili')) {
+      return gdApi('pic', { id: cleanId, source: source }).then(function (data) {
+        return data.url || '';
+      }).catch(function () { return ''; });
+    }
     return api('pic', { id: cleanId, source: source }).then(function (data) {
       return data.url || '';
     }).catch(function () { return ''; });
@@ -221,6 +227,12 @@
     if (!lyricId) return Promise.resolve({ lyric: '', tlyric: '' });
     // 去掉可能的 source: 前缀
     var cleanId = String(lyricId).indexOf(':') >= 0 ? String(lyricId).split(':').pop() : String(lyricId);
+    // 扩展音源走 GD API 直连
+    if (STATE.useExtendedSources && (source === 'joox' || source === 'bilibili')) {
+      return gdApi('lyric', { id: cleanId, source: source }).then(function (data) {
+        return { lyric: data.lyric || data.lrc || '', tlyric: data.tlyric || '' };
+      });
+    }
     return api('lyric', { id: cleanId, source: source }).then(function (data) {
       return { lyric: data.lyric || data.lrc || '', tlyric: data.tlyric || '' };
     });
