@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.4.2';
+  var BUILD_TIME = '2026-07-30-v1.4.3';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -2513,7 +2513,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.4.2</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.4.3</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3186,11 +3186,10 @@
               refs.loginStatus.className = 'rmp-login-status';
               break;
             case 802:
-              // 显示调试信息：查看后端返回的各检测方式结果
+              // 显示调试信息：查看后端返回的原始响应片段
               var debugInfo = '';
-              if (result.debug && Array.isArray(result.debug)) {
-                var methods = result.debug.map(function(d) { return (d.method || '?') + ':' + (d.code || d.error || '?'); }).join(', ');
-                debugInfo = ' [' + methods + ']';
+              if (result.debug_text) {
+                debugInfo = ' [' + result.debug_text.substring(0, 60) + ']';
               }
               refs.loginStatus.textContent = '待确认，请在手机上点击确认登录' + debugInfo;
               refs.loginStatus.className = 'rmp-login-status';
@@ -3402,7 +3401,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.4.2',
+    version: '1.4.3',
 
     apps: [{
       id: 'roche-music-player-home',
