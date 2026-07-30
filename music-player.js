@@ -3202,7 +3202,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.0.13',
+    version: '1.0.14',
 
     apps: [{
       id: 'roche-music-player-home',
