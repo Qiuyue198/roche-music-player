@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.3.3';
+  var BUILD_TIME = '2026-07-30-v1.3.4';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -2513,7 +2513,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.3.3</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.3.4</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3360,20 +3360,19 @@
     result += '歌手：' + (song.artist || '未知') + '\n';
     result += '专辑：' + (song.album || '未知') + '\n';
 
-    // 歌词注入（范围标注取代单独 "当前听到" 行）
+    // 歌词注入（范围标注，不强调"当前"——存在时间差无意义）
     if (STATE.lyrics && STATE.lyrics.length > 0) {
       var curIdx = STATE.currentLyricIndex;
       if (curIdx < 0) curIdx = 0;
 
       if (STATE.lyricsFullInject) {
         // 模式B：全部歌词 + 标注当前10行范围
-        result += '完整歌词（标注【>>>...<<<】范围为user当前听到的10行，【当前】为正在唱的一句）：\n';
+        result += '完整歌词（标注【>>>...<<<】范围）：\n';
         var rangeStart = Math.max(0, curIdx - 5);
         var rangeEnd = Math.min(STATE.lyrics.length - 1, curIdx + 4);
         for (var i = 0; i < STATE.lyrics.length; i++) {
           var markers = '';
           if (i === rangeStart) markers += '【>>>';
-          if (i === curIdx) markers += '【当前】';
           if (i === rangeEnd) markers += '<<<】';
           result += markers + (STATE.lyrics[i].text || '...') + '\n';
         }
@@ -3381,10 +3380,9 @@
         // 模式A（默认）：仅注入当前前后各5行
         var start = Math.max(0, curIdx - 5);
         var end = Math.min(STATE.lyrics.length, curIdx + 6);
-        result += '歌词（user当前听到第 ' + (curIdx + 1) + ' 句，标注【当前】，仅显示前后5行）：\n';
+        result += '歌词：\n';
         for (var j = start; j < end; j++) {
-          var pfx = (j === curIdx) ? '【当前】' : '';
-          result += pfx + (STATE.lyrics[j].text || '...') + '\n';
+          result += (STATE.lyrics[j].text || '...') + '\n';
         }
       }
     }
@@ -3399,7 +3397,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.3.3',
+    version: '1.3.4',
 
     apps: [{
       id: 'roche-music-player-home',
