@@ -3106,6 +3106,24 @@
 
   // ==================== 存储管理 ====================
 
+  // 将 STATE 同步到设置面板所有 UI 控件（loadSettings 后调用）
+  function syncSettingsToUI() {
+    var refs = STATE.appRefs;
+    if (!refs.root) return;
+    if (refs.backendInput) refs.backendInput.value = STATE.backend;
+    if (refs.defaultSourceSelect) refs.defaultSourceSelect.value = STATE.defaultSource;
+    if (refs.qualitySelect) refs.qualitySelect.value = STATE.quality;
+    if (refs.volumeSlider) refs.volumeSlider.value = STATE.volume;
+    if (refs.islandTopInput) refs.islandTopInput.value = STATE.islandTop;
+    if (refs.islandScrollModeSelect) refs.islandScrollModeSelect.value = STATE.islandScrollMode;
+    if (refs.islandVisibleToggle) refs.islandVisibleToggle.classList.toggle('on', !!STATE.islandVisible);
+    if (refs.extendedSourcesToggle) refs.extendedSourcesToggle.classList.toggle('on', !!STATE.useExtendedSources);
+    if (refs.agreeCheckbox) refs.agreeCheckbox.checked = STATE.hasAgreedDisclaimer;
+    // 同步搜索来源下拉框选项
+    updateSearchSourceOptions();
+    updateDisclaimerLockUI();
+  }
+
   // 保存设置到 roche.storage
   function saveSettings() {
     if (!STATE.roche || !STATE.roche.storage) return;
@@ -3229,7 +3247,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.0.15',
+    version: '1.0.16',
 
     apps: [{
       id: 'roche-music-player-home',
@@ -3249,11 +3267,7 @@
           // 加载设置是异步的，失败不影响核心功能
           loadSettings(roche).then(function () {
             updatePlayModeUI();
-            // 同步免责声明状态到 UI（renderApp 先于 loadSettings，checkbox 初始为 false）
-            if (STATE.appRefs.agreeCheckbox) {
-              STATE.appRefs.agreeCheckbox.checked = STATE.hasAgreedDisclaimer;
-            }
-            updateDisclaimerLockUI();
+            syncSettingsToUI();
             // 恢复登录 UI（有 cookie 则尝试拉用户信息）
             if (STATE.cookie && STATE.userProfile) {
               updateLoginUI();
@@ -3337,11 +3351,7 @@
         createIsland();
         loadSettings(roche).then(function () {
           updatePlayModeUI();
-          // mount 中 renderApp 先于 loadSettings，同步声明状态到 UI
-          if (STATE.appRefs.agreeCheckbox) {
-            STATE.appRefs.agreeCheckbox.checked = STATE.hasAgreedDisclaimer;
-          }
-          updateDisclaimerLockUI();
+          syncSettingsToUI();
           STATE.initialized = true;
         }).catch(function () {
           STATE.initialized = true;
