@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.5.0';
+  var BUILD_TIME = '2026-07-30-v1.5.1';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -362,67 +362,101 @@
   }
 
   // 获取网易云扫码登录二维码（优先直连网易云API，国产IP不走Vercel代理）
+  // 按优先级尝试多个域名，避免 CORS 阻挡
+  var NETEASE_DIRECT_HOSTS = ['https://music.163.com', 'https://interface.music.163.com'];
   function getQrLogin() {
-    // 尝试直连：用户浏览器是国内IP，不会被网易云封锁
-    return fetch('https://music.163.com/api/login/qrcode/unikey?type=1', {
-      headers: { 'Accept': 'application/json' }
-    }).then(function (res) {
-      if (!res.ok) throw new Error('direct_failed');
-      return res.json();
-    }).then(function (data) {
-      if (data && data.code === 200 && data.unikey) {
-        // 生成二维码
-        var qrurl = 'https://music.163.com/login?codekey=' + data.unikey;
-        return {
-          unikey: data.unikey,
-          qrimg: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(qrurl),
-          qrurl: qrurl,
-          _direct: true
-        };
+    function tryHost(idx) {
+      if (idx >= NETEASE_DIRECT_HOSTS.length) {
+        // 全部失败，降级 Vercel
+        return api('netease_qr_login', {});
       }
-      throw new Error('direct_failed');
-    }).catch(function () {
-      // 降级：走 Vercel 后端
-      return api('netease_qr_login', {});
-    });
+      var host = NETEASE_DIRECT_HOSTS[idx];
+      return fetch(host + '/api/login/qrcode/unikey?type=1', {
+        headers: { 'Accept': 'application/json' }
+      }).then(function (res) {
+        if (!res.ok) throw new Error('failed');
+        return res.json();
+      }).then(function (data) {
+        if (data && data.code === 200 && data.unikey) {
+          var qrurl = 'https://music.163.com/login?codekey=' + data.unikey;
+          return {
+            unikey: data.unikey,
+            qrimg: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(qrurl),
+            qrurl: qrurl,
+            _direct: true
+          };
+        }
+        throw new Error('bad_response');
+      }).catch(function () {
+        return tryHost(idx + 1);
+      });
+    }
+    return tryHost(0);
   }
 
-  // 检查扫码状态（优先直连网易云API）
+  // 检查扫码状态（优先直连网易云API，GET方法避免CORS预检）
   function checkQrLogin(key, cookie) {
-    // 尝试直连
-    var body = new URLSearchParams();
-    body.append('key', key);
-    body.append('type', '1');
-    return fetch('https://music.163.com/api/login/qrcode/client/login', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body.toString(),
-    }).then(function (res) {
-      if (!res.ok) throw new Error('direct_failed');
-      return res.json();
-    }).then(function (data) {
-      // 处理数组响应
-      if (Array.isArray(data) && data.length > 0) data = data[0];
-      if (data && typeof data.code === 'number') {
-        // 803 成功时，从 Set-Cookie 响应头提取 cookie
-        // （fetch 无法直接读取 Set-Cookie，所以成功时再通过 Vercel 获取）
-        return {
-          code: data.code,
-          cookie: data.cookie || '',
-          message: data.message || '',
-          _direct: true
-        };
+    function tryHost(idx) {
+      if (idx >= NETEASE_DIRECT_HOSTS.length) {
+        // 全部失败，降级 Vercel
+        var params = { key: key };
+        if (cookie) params.cookie = cookie;
+        return api('netease_qr_check', params);
       }
-      throw new Error('direct_failed');
-    }).catch(function () {
-      // 降级：走 Vercel 后端
-      var params = { key: key };
-      if (cookie) params.cookie = cookie;
-      return api('netease_qr_check', params);
-    });
+      var host = NETEASE_DIRECT_HOSTS[idx];
+      // GET 方式不触发 CORS 预检，更不容易被浏览器拦截
+      var url = host + '/api/login/qrcode/client/login?key=' + encodeURIComponent(key) + '&type=1';
+      return fetch(url, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      }).then(function (res) {
+        if (!res.ok) throw new Error('failed');
+        return res.json();
+      }).then(function (data) {
+        if (Array.isArray(data) && data.length > 0) data = data[0];
+        if (data && typeof data.code === 'number') {
+          return {
+            code: data.code,
+            cookie: data.cookie || '',
+            message: data.message || '',
+            _direct: true
+          };
+        }
+        throw new Error('bad_response');
+      }).catch(function () {
+        // GET 失败，尝试 POST
+        try {
+          var body = new URLSearchParams();
+          body.append('key', key);
+          body.append('type', '1');
+          return fetch(host + '/api/login/qrcode/client/login', {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: body.toString(),
+          }).then(function (res) {
+            if (!res.ok) throw new Error('failed');
+            return res.json();
+          }).then(function (data) {
+            if (Array.isArray(data) && data.length > 0) data = data[0];
+            if (data && typeof data.code === 'number') {
+              return {
+                code: data.code,
+                cookie: data.cookie || '',
+                message: data.message || '',
+                _direct: true
+              };
+            }
+            throw new Error('bad_response');
+          });
+        } catch (e) {
+          return tryHost(idx + 1);
+        }
+      });
+    }
+    return tryHost(0);
   }
 
   // ==================== 音频引擎 ====================
@@ -2565,7 +2599,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.5.0</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.5.1</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3455,7 +3489,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.5.0',
+    version: '1.5.1',
 
     apps: [{
       id: 'roche-music-player-home',
