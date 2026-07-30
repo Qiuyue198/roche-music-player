@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.4.4';
+  var BUILD_TIME = '2026-07-30-v1.4.5';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -2513,7 +2513,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.4.4</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.4.5</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3401,7 +3401,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.4.4',
+    version: '1.4.5',
 
     apps: [{
       id: 'roche-music-player-home',
@@ -3456,8 +3456,8 @@
           var artist = String((args && args.artist) || '');
           if (!songName) return Promise.resolve({ error: 'missing song name' });
           var keyword = artist ? (songName + ' ' + artist) : songName;
-          // char 搜索：始终走全平台搜索
-          var searchSource = 'all';
+          // char 搜索：仅搜索网易云（JOOX 播放不稳定）
+          var searchSource = 'netease';
           var limit = 10;
           // 带重试的搜索（CF Worker 不稳定，最多重试 5 次，间隔递增）
           function searchWithRetry(src, kw, lim, retries, delay) {
