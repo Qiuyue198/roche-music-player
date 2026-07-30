@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.3.2';
+  var BUILD_TIME = '2026-07-30-v1.3.3';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -2513,7 +2513,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.3.2</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.3.3</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3358,22 +3358,9 @@
     var result = '【user当前正在听音乐】\n';
     result += '歌曲：《' + (song.name || '未知') + '》\n';
     result += '歌手：' + (song.artist || '未知') + '\n';
-    result += '专辑：' + (song.album || '未知') + '\n\n';
+    result += '专辑：' + (song.album || '未知') + '\n';
 
-    // 当前听到的歌词
-    var currentLyric = '';
-    if (STATE.lyrics && STATE.lyrics.length > 0 && STATE.currentLyricIndex >= 0) {
-      currentLyric = STATE.lyrics[STATE.currentLyricIndex].text;
-      if (STATE.tlyrics && STATE.tlyrics.length > 0) {
-        var tIdx = getCurrentLyricIndex(STATE.tlyrics, STATE.audio.currentTime);
-        if (tIdx >= 0 && STATE.tlyrics[tIdx]) {
-          currentLyric += '（' + STATE.tlyrics[tIdx].text + '）';
-        }
-      }
-    }
-    result += 'user当前听到的歌词：' + (currentLyric || '（纯音乐或暂无歌词）') + '\n\n';
-
-    // 歌词注入
+    // 歌词注入（范围标注取代单独 "当前听到" 行）
     if (STATE.lyrics && STATE.lyrics.length > 0) {
       var curIdx = STATE.currentLyricIndex;
       if (curIdx < 0) curIdx = 0;
@@ -3412,7 +3399,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.3.2',
+    version: '1.3.3',
 
     apps: [{
       id: 'roche-music-player-home',
