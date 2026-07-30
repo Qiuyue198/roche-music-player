@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.1.0-joox';
+  var BUILD_TIME = '2026-07-30-v1.2.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -45,12 +45,8 @@
     islandVisible: true,
     // 灵动岛未点开状态滚动展示模式：title（歌名）或 lyric（歌词）
     islandScrollMode: 'title',
-    // 免责声明同意状态
-    hasAgreedDisclaimer: false,
     // 灵动岛最小化（本地状态，不持久化）
     islandMinimized: false,
-    // 扩展音源开关（默认关闭，仅网易云可用）
-    useExtendedSources: false,
     initialized: false
   };
 
@@ -127,24 +123,10 @@
     return fetch(url, { headers: headers }).then(function (res) { return res.json(); });
   }
 
-  // 搜索音乐
+  // 搜索音乐 —— 始终走全平台 search_all，过滤无歌词歌曲，优先有歌词+网易云
   function searchMusic(keywords, source, limit) {
     limit = limit || 20;
-    // 登录网易云后：直接用原生网易云搜索
-    if (STATE.cookie && source === 'netease') {
-      return api('netease_native_search', { keywords: keywords, limit: limit }).then(function (data) {
-        var songs = data.songs || data.results || [];
-        return songs.map(function (s) {
-          var cleanId = String(s.id);
-          return Object.assign({}, s, {
-            id: cleanId,
-            picId: s.picId || s.cover || cleanId,
-            lyricId: s.lyricId || cleanId,
-            platform: 'netease'
-          });
-        });
-      });
-    }
+
     function normalizeSong(s) {
       var rawId = String(s.id || s.mediaId || '');
       var cleanId = rawId.indexOf(':') >= 0 ? rawId.split(':').pop() : rawId;
@@ -160,32 +142,14 @@
       return Object.assign({}, s, {
         id: cleanId, artist: artist, singer: artist,
         picId: picId, lyricId: lyricId,
-        platform: s.platform || s.source || source
+        platform: s.platform || s.source || 'joox'
       });
     }
-    // 从 search_all 结果中提取歌曲，按扩展音源开关过滤
-    function extractFromAll(data) {
-      var all = data.all || {};
-      var results = [];
-      if (STATE.useExtendedSources) {
-        if (source === 'all') {
-          if (data.merged && data.merged.length) return data.merged.map(normalizeSong);
-          ['netease', 'joox'].forEach(function (p) {
-            if (all[p]) all[p].forEach(function (s) { results.push(normalizeSong(s)); });
-          });
-        } else {
-          if (all[source]) all[source].forEach(function (s) { results.push(normalizeSong(s)); });
-        }
-      } else {
-        if (all.joox) all.joox.forEach(function (s) { results.push(normalizeSong(s)); });
-      }
-      return results;
-    }
-    // 并发轮询搜索：同时发 3 个请求，间隔 600ms 重试，直到有结果
+
+    // 并发轮询 search_all
     function pollSearchAll(retries) {
       retries = retries || 0;
       var MAX = 4;
-      // 第一轮发1个，后续轮发2个并发
       var count = retries === 0 ? 1 : 2;
       var reqs = [];
       for (var i = 0; i < count; i++) {
@@ -193,20 +157,90 @@
       }
       return Promise.all(reqs).then(function (responses) {
         for (var j = 0; j < responses.length; j++) {
-          var songs = extractFromAll(responses[j]);
-          if (songs && songs.length > 0) return songs;
+          var data = responses[j];
+          if (data.merged && data.merged.length) return data.merged.map(function (s) { return normalizeSong(s); });
+          var all = data.all || {};
+          var results = [];
+          ['netease', 'joox'].forEach(function (p) {
+            if (all[p]) all[p].forEach(function (s) { results.push(normalizeSong(s)); });
+          });
+          if (results.length > 0) return results;
         }
         if (retries < MAX) {
-          return new Promise(function (resolve) {
-            setTimeout(function () {
-              resolve(pollSearchAll(retries + 1));
-            }, 600);
-          });
+          return new Promise(function (resolve) { setTimeout(function () { resolve(pollSearchAll(retries + 1)); }, 600); });
         }
         return [];
       });
     }
-    return pollSearchAll(0);
+
+    // 登录网易云后额外走原生搜索
+    var nativePromise = Promise.resolve([]);
+    if (STATE.cookie) {
+      nativePromise = api('netease_native_search', { keywords: keywords, limit: limit }).then(function (data) {
+        var songs = data.songs || data.results || [];
+        return songs.map(function (s) {
+          return {
+            id: String(s.id), name: s.name || '',
+            artist: (s.ar || []).map(function (a) { return a.name; }).join(' / '),
+            album: s.al ? s.al.name : '', picId: s.al ? s.al.picUrl : '',
+            lyricId: String(s.id), cover: s.al ? s.al.picUrl : '',
+            duration: Math.round((s.dt || 0) / 1000), platform: 'netease'
+          };
+        });
+      }).catch(function () { return []; });
+    }
+
+    return Promise.all([pollSearchAll(0), nativePromise]).then(function (results) {
+      var gdSongs = results[0] || [];
+      var nativeSongs = results[1] || [];
+      // 合并：原生网易云优先
+      var seen = {};
+      var merged = [];
+      nativeSongs.forEach(function (s) { seen[s.id + '|' + s.platform] = true; merged.push(s); });
+      gdSongs.forEach(function (s) {
+        var key = s.id + '|' + s.platform;
+        if (!seen[key]) { seen[key] = true; merged.push(s); }
+      });
+      // 过滤无歌词的
+      return filterByLyrics(merged);
+    });
+  }
+
+  // 过滤无歌词歌曲：并发获取歌词，仅保留有歌词的结果
+  // 排序：netease 优先于 joox
+  function filterByLyrics(songs) {
+    if (!songs || songs.length === 0) return Promise.resolve([]);
+    var checks = songs.map(function (song) {
+      var lyricId = song.lyricId || song.id;
+      var source = song.platform || 'joox';
+      return getLyric(lyricId, source).then(function (data) {
+        if (data.lyric && data.lyric.trim().length > 10) song._hasLyric = true;
+        else song._hasLyric = false;
+        return song;
+      }).catch(function () { song._hasLyric = false; return song; });
+    });
+    return Promise.allSettled ? Promise.allSettled(checks).then(function (results) {
+      var withLyrics = [];
+      results.forEach(function (r) {
+        if (r.status === 'fulfilled' && r.value._hasLyric) withLyrics.push(r.value);
+      });
+      withLyrics.sort(function (a, b) {
+        if (a.platform === 'netease' && b.platform !== 'netease') return -1;
+        if (a.platform !== 'netease' && b.platform === 'netease') return 1;
+        return 0;
+      });
+      withLyrics.forEach(function (s) { delete s._hasLyric; });
+      return withLyrics;
+    }) : Promise.all(checks).then(function (all) {
+      var withLyrics = all.filter(function (s) { return s._hasLyric; });
+      withLyrics.sort(function (a, b) {
+        if (a.platform === 'netease' && b.platform !== 'netease') return -1;
+        if (a.platform !== 'netease' && b.platform === 'netease') return 1;
+        return 0;
+      });
+      withLyrics.forEach(function (s) { delete s._hasLyric; });
+      return withLyrics;
+    });
   }
 
   // 获取播放 URL（统一走 Vercel 后端，支持所有音源）
@@ -340,11 +374,6 @@
   // 播放指定歌曲
   function playSong(song, index) {
     if (!song) return;
-    // 免责声明拦截：未同意则不允许播放
-    if (!STATE.hasAgreedDisclaimer) {
-      if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('请先在设置中同意免责声明');
-      return;
-    }
     // iOS 未解锁时提示用户先点击解锁
     if (!STATE.audioUnlocked) {
       if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('请先点击播放器任意位置解锁音频');
@@ -1994,68 +2023,6 @@
   background: rgba(194,12,12,0.12);\
   color: #E60026;\
 }\
-/* 免责声明 */\
-.rmp-disclaimer {\
-  margin-top: 14px;\
-  padding: 12px;\
-  border: 1px solid rgba(230,0,38,0.25);\
-  border-radius: 10px;\
-  background: rgba(230,0,38,0.04);\
-}\
-.rmp-disclaimer-title {\
-  font-size: 12px;\
-  font-weight: 600;\
-  color: #E60026;\
-  margin-bottom: 6px;\
-}\
-.rmp-disclaimer-body {\
-  font-size: 11px;\
-  color: rgba(255,255,255,0.5);\
-  line-height: 1.6;\
-}\
-.rmp-disclaimer-body a {\
-  color: rgba(230,0,38,0.7);\
-  text-decoration: none;\
-}\
-.rmp-disclaimer-body a:hover {\
-  color: #E60026;\
-  text-decoration: underline;\
-}\
-.rmp-disclaimer-check-row {\
-  margin-top: 10px;\
-  padding-top: 8px;\
-  border-top: 1px dashed rgba(255,255,255,0.08);\
-}\
-.rmp-disclaimer-check {\
-  display: flex;\
-  align-items: center;\
-  gap: 6px;\
-  font-size: 12px;\
-  color: rgba(255,255,255,0.7);\
-  cursor: pointer;\
-  user-select: none;\
-}\
-.rmp-disclaimer-check input {\
-  width: 16px;\
-  height: 16px;\
-  accent-color: #C20C0C;\
-  cursor: pointer;\
-}\
-.rmp-disclaimer-locked {\
-  margin-top: 14px;\
-  padding: 12px;\
-  border: 1px solid rgba(230,0,38,0.3);\
-  border-radius: 10px;\
-  background: rgba(230,0,38,0.06);\
-  font-size: 12px;\
-  color: #E60026;\
-  text-align: center;\
-  line-height: 1.6;\
-}\
-.rmp-disclaimer-locked a {\
-  color: #E60026;\
-  text-decoration: underline;\
-}\
 ';
   }
 
@@ -2104,10 +2071,6 @@
     <div class="rmp-panel active" data-panel="search">\
       <div class="rmp-search-bar">\
         <input type="text" class="rmp-search-input" placeholder="输入歌曲名或歌手名..." />\
-        <select class="rmp-select rmp-search-source">\
-          <option value="joox">JOOX</option>\
-          <option value="netease">网易云</option>\
-        </select>\
         <button class="rmp-btn rmp-search-btn">搜索</button>\
       </div>\
       <div class="rmp-search-results"></div>\
@@ -2223,32 +2186,9 @@
             <div class="rmp-toggle rmp-island-visible-toggle" role="switch"></div>\
           </div>\
         </div>\
-        <div class="rmp-settings-group">\
-          <div class="rmp-toggle-row">\
-            <span class="rmp-toggle-label">扩展音源（需自备代理，默认关闭）</span>\
-            <div class="rmp-toggle rmp-extended-sources-toggle" role="switch"></div>\
-          </div>\
-          <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:4px;line-height:1.5;">关闭时仅使用 JOOX；开启后可切换为网易云（需登录并使用代理访问外网）</div>\
-        </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.1.0 (joox)</div>\
-        <div class="rmp-disclaimer">\
-          <div class="rmp-disclaimer-title">免责声明</div>\
-          <div class="rmp-disclaimer-body">\
-            1. 本插件是一个音乐播放工具平台，本身不提供、不存储、不托管任何音乐内容。<br/>\
-            2. 音乐搜索、播放、歌词等数据均来自第三方开放的音乐接口（如 <a href="https://music.gdstudio.xyz" target="_blank" rel="noopener">GD音乐台</a> 等），所有数据版权归原始平台所有。<br/>\
-            3. 本插件仅供个人学习与技术研究，不得用于任何商业用途。使用者应确保自身行为符合所在地法律法规及相关平台用户协议。<br/>\
-            4. 如认为插件中的音乐内容侵犯了您的权益，请联系对应的数据源平台处理。本插件开发者不承担因使用本插件产生的任何法律责任。<br/>\
-            5. 继续使用本插件将视为您已阅读并同意以上全部声明。\
-          </div>\
-          <div class="rmp-disclaimer-check-row">\
-            <label class="rmp-disclaimer-check">\
-              <input type="checkbox" class="rmp-agree-checkbox" />\
-              <span>我已阅读并同意以上声明</span>\
-            </label>\
-          </div>\
-        </div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.2.0</div>\
       </div>\
     </div>\
   </div>\
@@ -2262,7 +2202,6 @@
       panels: root.querySelectorAll('.rmp-panel'),
       // 搜索
       searchInput: root.querySelector('.rmp-search-input'),
-      searchSource: root.querySelector('.rmp-search-source'),
       searchBtn: root.querySelector('.rmp-search-btn'),
       searchResults: root.querySelector('.rmp-search-results'),
       // 正在播放
@@ -2305,20 +2244,11 @@
       islandScrollModeSelect: root.querySelector('.rmp-island-scroll-mode-select'),
       saveSettingsBtn: root.querySelector('.rmp-save-settings-btn'),
       resetIslandBtn: root.querySelector('.rmp-reset-island-btn'),
-      agreeCheckbox: root.querySelector('.rmp-agree-checkbox'),
-      extendedSourcesToggle: root.querySelector('.rmp-extended-sources-toggle'),
       // 顶部栏
       closeBtn: root.querySelector('.rmp-close-btn')
     };
 
-    // 初始化免责声明同意状态
-    if (STATE.appRefs.agreeCheckbox) {
-      STATE.appRefs.agreeCheckbox.checked = STATE.hasAgreedDisclaimer;
-    }
-    updateDisclaimerLockUI();
-
     // 初始化设置值
-    STATE.appRefs.searchSource.value = STATE.defaultSource;
     STATE.appRefs.backendInput.value = STATE.backend;
     STATE.appRefs.defaultSourceSelect.value = STATE.defaultSource;
     STATE.appRefs.qualitySelect.value = STATE.quality;
@@ -2327,10 +2257,6 @@
     STATE.appRefs.islandScrollModeSelect.value = STATE.islandScrollMode;
     // 初始化开关状态
     if (STATE.islandVisible) STATE.appRefs.islandVisibleToggle.classList.add('on');
-    if (STATE.useExtendedSources) STATE.appRefs.extendedSourcesToggle.classList.add('on');
-
-    // 根据扩展音源开关状态初始化搜索来源下拉框
-    updateSearchSourceOptions();
 
     bindAppEvents();
     updateAppSongInfo();
@@ -2357,20 +2283,14 @@
 
     // 搜索
     function doSearch() {
-      if (!STATE.hasAgreedDisclaimer) {
-        if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('请先在设置中同意免责声明');
-        switchToSettingsTab();
-        return;
-      }
       var keywords = refs.searchInput.value.trim();
       if (!keywords) {
         if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('请输入搜索关键词');
         return;
       }
-      var source = refs.searchSource.value;
       STATE.isSearching = true;
       refs.searchResults.innerHTML = '<div class="rmp-loading"><div class="rmp-spinner"></div></div>';
-      searchMusic(keywords, source, 20).then(function (results) {
+      searchMusic(keywords, 'all', 20).then(function (results) {
         STATE.isSearching = false;
         STATE.searchResults = results;
         renderSearchResults();
@@ -2548,19 +2468,6 @@
     refs.islandVisibleToggle.addEventListener('click', onIslandVisibleToggle);
     STATE.appCleanups.push(function () { refs.islandVisibleToggle.removeEventListener('click', onIslandVisibleToggle); });
 
-    // 扩展音源开关
-    function onExtendedSourcesToggle() {
-      STATE.useExtendedSources = !STATE.useExtendedSources;
-      refs.extendedSourcesToggle.classList.toggle('on', STATE.useExtendedSources);
-      updateSearchSourceOptions();
-      saveSettings();
-      if (STATE.roche && STATE.roche.ui) {
-        STATE.roche.ui.toast(STATE.useExtendedSources ? '已开启扩展音源（JOOX、网易云），需代理' : '已关闭扩展音源，仅使用 JOOX');
-      }
-    }
-    refs.extendedSourcesToggle.addEventListener('click', onExtendedSourcesToggle);
-    STATE.appCleanups.push(function () { refs.extendedSourcesToggle.removeEventListener('click', onExtendedSourcesToggle); });
-
     // 保存设置
     function onSaveSettings() {
       var backend = refs.backendInput.value.trim();
@@ -2597,89 +2504,6 @@
     }
     refs.resetIslandBtn.addEventListener('click', onResetIsland);
     STATE.appCleanups.push(function () { refs.resetIslandBtn.removeEventListener('click', onResetIsland); });
-
-    // 免责声明同意框
-    function onAgreeChange() {
-      STATE.hasAgreedDisclaimer = !!refs.agreeCheckbox.checked;
-      saveSettings();
-      updateDisclaimerLockUI();
-      if (STATE.hasAgreedDisclaimer && STATE.roche && STATE.roche.ui) {
-        STATE.roche.ui.toast('已同意声明，可正常使用');
-      }
-    }
-    refs.agreeCheckbox.addEventListener('change', onAgreeChange);
-    STATE.appCleanups.push(function () { refs.agreeCheckbox.removeEventListener('change', onAgreeChange); });
-  }
-
-  // 跳转到设置页（未同意声明时引导）
-  function switchToSettingsTab() {
-    if (STATE.appRefs.root) {
-      var tab = STATE.appRefs.root.querySelector('.rmp-tab[data-tab="settings"]');
-      if (tab) tab.click();
-    }
-  }
-
-  // 更新免责声明锁定 UI：未同意时在搜索/播放列表显示提示
-  function updateDisclaimerLockUI() {
-    if (!STATE.appRefs.root) return;
-    var root = STATE.appRefs.root;
-    if (STATE.hasAgreedDisclaimer) {
-      // 已同意：移除锁定提示
-      var locked = root.querySelectorAll('.rmp-disclaimer-locked');
-      locked.forEach(function (el) { el.remove(); });
-      // 恢复搜索栏/播放列表交互（如果有 disabled）
-      var searchInput = root.querySelector('.rmp-search-input');
-      var searchBtn = root.querySelector('.rmp-search-btn');
-      if (searchInput) searchInput.disabled = false;
-      if (searchBtn) searchBtn.disabled = false;
-    } else {
-      // 未同意：在搜索结果区显示锁定提示
-      var searchResults = root.querySelector('.rmp-search-results');
-      if (searchResults && !root.querySelector('.rmp-disclaimer-locked')) {
-        searchResults.innerHTML = '<div class="rmp-disclaimer-locked">请先在右上角「设置」中阅读并同意免责声明后使用<br/>（本插件为工具平台，不提供音乐内容）</div>';
-      }
-    }
-  }
-
-  // 根据扩展音源开关更新搜索来源下拉框
-  function updateSearchSourceOptions() {
-    var searchSourceEl = STATE.appRefs.searchSource;
-    var defaultSourceEl = STATE.appRefs.defaultSourceSelect;
-    if (!searchSourceEl) return;
-
-    if (STATE.useExtendedSources) {
-      // 开启扩展音源：JOOX + 网易云（需开代理登录）
-      var allOptions = [
-        { value: 'joox', label: 'JOOX' },
-        { value: 'netease', label: '网易云' }
-      ];
-      setSelectOptions(searchSourceEl, allOptions);
-      if (defaultSourceEl) setSelectOptions(defaultSourceEl, allOptions);
-      if (defaultSourceEl) defaultSourceEl.value = STATE.defaultSource;
-      searchSourceEl.value = STATE.defaultSource;
-    } else {
-      // 关闭扩展音源：仅 JOOX
-      var jooxOnly = [
-        { value: 'joox', label: 'JOOX' }
-      ];
-      setSelectOptions(searchSourceEl, jooxOnly);
-      if (defaultSourceEl) setSelectOptions(defaultSourceEl, jooxOnly);
-      STATE.defaultSource = 'joox';
-      searchSourceEl.value = 'joox';
-      if (defaultSourceEl) defaultSourceEl.value = 'joox';
-      saveSettings();
-    }
-  }
-
-  // 设置 select 元素的选项
-  function setSelectOptions(selectEl, options) {
-    selectEl.innerHTML = '';
-    options.forEach(function (opt) {
-      var o = document.createElement('option');
-      o.value = opt.value;
-      o.textContent = opt.label;
-      selectEl.appendChild(o);
-    });
   }
 
   // 切换标签页
@@ -3086,35 +2910,24 @@
     if (refs.islandTopInput) refs.islandTopInput.value = STATE.islandTop;
     if (refs.islandScrollModeSelect) refs.islandScrollModeSelect.value = STATE.islandScrollMode;
     if (refs.islandVisibleToggle) refs.islandVisibleToggle.classList.toggle('on', !!STATE.islandVisible);
-    if (refs.extendedSourcesToggle) refs.extendedSourcesToggle.classList.toggle('on', !!STATE.useExtendedSources);
-    if (refs.agreeCheckbox) refs.agreeCheckbox.checked = STATE.hasAgreedDisclaimer;
-    // 同步搜索来源下拉框选项
-    updateSearchSourceOptions();
-    updateDisclaimerLockUI();
   }
 
-  // 保存设置到 roche.storage（全部异步，返回 Promise）
+  // 保存设置到 roche.storage（顺序调用，避免并发导致持久化失败）
   function saveSettings() {
-    if (!STATE.roche || !STATE.roche.storage) return Promise.resolve();
-    var sets = [
-      STATE.roche.storage.set('rmp_backend', STATE.backend),
-      STATE.roche.storage.set('rmp_default_source', STATE.defaultSource),
-      STATE.roche.storage.set('rmp_quality', STATE.quality),
-      STATE.roche.storage.set('rmp_volume', String(STATE.volume)),
-      STATE.roche.storage.set('rmp_play_mode', STATE.playMode),
-      STATE.roche.storage.set('rmp_island_top', String(STATE.islandTop)),
-      STATE.roche.storage.set('rmp_island_visible', STATE.islandVisible ? '1' : '0'),
-      STATE.roche.storage.set('rmp_island_scroll_mode', STATE.islandScrollMode),
-      STATE.roche.storage.set('rmp_agreed_disclaimer', STATE.hasAgreedDisclaimer ? '1' : '0'),
-      STATE.roche.storage.set('rmp_extended_sources', STATE.useExtendedSources ? '1' : '0')
-    ];
-    if (STATE.cookie) {
-      sets.push(STATE.roche.storage.set('rmp_cookie', STATE.cookie));
-    }
-    if (STATE.userProfile) {
-      sets.push(STATE.roche.storage.set('rmp_user_profile', JSON.stringify(STATE.userProfile)));
-    }
-    return Promise.all(sets).catch(function () {});
+    if (!STATE.roche || !STATE.roche.storage) return;
+    try {
+      STATE.roche.storage.set('rmp_backend', STATE.backend);
+      STATE.roche.storage.set('rmp_default_source', STATE.defaultSource);
+      STATE.roche.storage.set('rmp_quality', STATE.quality);
+      STATE.roche.storage.set('rmp_volume', String(STATE.volume));
+      STATE.roche.storage.set('rmp_play_mode', STATE.playMode);
+      STATE.roche.storage.set('rmp_island_top', String(STATE.islandTop));
+      STATE.roche.storage.set('rmp_island_visible', STATE.islandVisible ? '1' : '0');
+      STATE.roche.storage.set('rmp_island_scroll_mode', STATE.islandScrollMode);
+      STATE.roche.storage.set('rmp_agreed_disclaimer', '1');
+      if (STATE.cookie) STATE.roche.storage.set('rmp_cookie', STATE.cookie);
+      if (STATE.userProfile) STATE.roche.storage.set('rmp_user_profile', JSON.stringify(STATE.userProfile));
+    } catch (e) {}
   }
 
   // 从 roche.storage 加载设置
@@ -3162,10 +2975,6 @@
           }
         } catch (e) {}
       }
-      // 加载免责声明同意状态
-      if (results[11] === '1') STATE.hasAgreedDisclaimer = true;
-      // 加载扩展音源开关状态
-      if (results[12] === '1') STATE.useExtendedSources = true;
     }).catch(function () {});
   }
 
@@ -3271,13 +3080,9 @@
           var songName = String((args && args.song) || '');
           var artist = String((args && args.artist) || '');
           if (!songName) return Promise.resolve({ error: 'missing song name' });
-          // 免责声明拦截
-          if (!STATE.hasAgreedDisclaimer) {
-            return Promise.resolve({ success: false, message: '用户尚未同意免责声明，请在插件设置中同意后再点歌' });
-          }
           var keyword = artist ? (songName + ' ' + artist) : songName;
-          // char 搜索受扩展音源开关限制：关闭时仅用 JOOX，开启时使用默认音源
-          var searchSource = STATE.useExtendedSources ? STATE.defaultSource : 'joox';
+          // char 搜索：始终走全平台搜索
+          var searchSource = 'all';
           var limit = 10;
           // 带重试的搜索（CF Worker 不稳定，最多重试 5 次，间隔递增）
           function searchWithRetry(src, kw, lim, retries, delay) {
