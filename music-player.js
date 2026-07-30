@@ -15,7 +15,7 @@
     tlyrics: [],              // 解析后的翻译歌词 [{time, text}]
     currentLyricIndex: -1,    // 当前歌词行索引
     cookie: '',               // 网易云 cookie
-    backend: 'https://456.chajianreader.cc.cd', // 后端地址
+    backend: 'https://vercel.chajianreader.cc.cd', // 后端地址（Vercel，国内更稳定）
     defaultSource: 'netease', // 默认音源
     quality: 'standard',      // 音质
     // 灵动岛相关
