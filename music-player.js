@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.6.0';
+  var BUILD_TIME = '2026-07-30-v1.7.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -16,7 +16,7 @@
     tlyrics: [],              // 解析后的翻译歌词 [{time, text}]
     currentLyricIndex: -1,    // 当前歌词行索引
     cookie: '',               // 网易云 cookie
-    backend: 'https://vercel.chajianreader.cc.cd', // 后端地址（Vercel，国内更稳定）
+    backend: 'https://456.chajianreader.cc.cd', // 后端地址（CF Worker）
     defaultSource: 'joox', // 默认音源
     quality: 'standard',      // 音质
     // 灵动岛相关
@@ -361,43 +361,14 @@
     });
   }
 
-  // 获取网易云扫码登录二维码（纯直连，不走任何代理）
-  var NETEASE_HOST = 'https://music.163.com';
+  // 获取网易云扫码登录二维码（通过 CF Worker 后端，避免 CORS）
   function getQrLogin() {
-    return fetch(NETEASE_HOST + '/api/login/qrcode/unikey?type=1', {
-      headers: { 'Accept': 'application/json' }
-    }).then(function (res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    }).then(function (data) {
-      if (!data || data.code !== 200 || !data.unikey) throw new Error('bad_response: ' + JSON.stringify(data));
-      var qrurl = 'https://music.163.com/login?codekey=' + data.unikey;
-      return {
-        unikey: data.unikey,
-        qrimg: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(qrurl),
-        qrurl: qrurl
-      };
-    });
+    return api('netease_qr_login', {});
   }
 
-  // 检查扫码状态（纯直连，GET 方式避免 CORS 预检）
+  // 检查扫码状态
   function checkQrLogin(key) {
-    var url = NETEASE_HOST + '/api/login/qrcode/client/login?key=' + encodeURIComponent(key) + '&type=1';
-    return fetch(url, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' }
-    }).then(function (res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    }).then(function (data) {
-      if (Array.isArray(data)) data = data[0];
-      if (!data || typeof data.code !== 'number') throw new Error('bad_response');
-      return {
-        code: data.code,
-        cookie: data.cookie || '',
-        message: data.message || ''
-      };
-    });
+    return api('netease_qr_check', { key: key });
   }
 
   // ==================== 音频引擎 ====================
@@ -2540,7 +2511,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.6.0</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.7.0</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3417,7 +3388,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.6.0',
+    version: '1.7.0',
 
     apps: [{
       id: 'roche-music-player-home',
