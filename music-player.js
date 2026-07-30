@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.2.3';
+  var BUILD_TIME = '2026-07-30-v1.3.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -49,6 +49,8 @@
     islandMinimized: false,
     // 灵动岛主动关闭（关闭按钮触发），关闭后contextProvider停止注入，可被点歌唤醒
     islandClosed: false,
+    // 歌词注入模式：false=仅当前前后5行，true=全部歌词+标注当前10行范围
+    lyricsFullInject: false,
     initialized: false
   };
 
@@ -653,7 +655,7 @@
 
   // ==================== 灵动岛 ====================
 
-  // 灵动岛样式
+  // 灵动岛样式 —— iPhone 灵动岛风格 + 网易云精致美学
   function getIslandStyles() {
     return '\
 #rmp-island {\
@@ -662,52 +664,60 @@
   left: 50%;\
   transform: translateX(-50%);\
   z-index: 99999;\
-  background: rgba(0, 0, 0, 0.78);\
-  -webkit-backdrop-filter: blur(20px);\
-  backdrop-filter: blur(20px);\
-  border-radius: 28px;\
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 0 0.5px rgba(255,255,255,0.1);\
+  /* 深黑玻璃质感 */\
+  background: rgba(18, 18, 18, 0.86);\
+  -webkit-backdrop-filter: blur(28px) saturate(200%);\
+  backdrop-filter: blur(28px) saturate(200%);\
+  /* 真·胶囊圆角（iPhone 灵动岛风格）*/\
+  border-radius: 44px;\
+  /* 多层次精致阴影 + 顶部光泽 */\
+  box-shadow:\
+    0 6px 30px rgba(0, 0, 0, 0.5),\
+    0 0 0 0.5px rgba(255, 255, 255, 0.1),\
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.06);\
   color: #fff;\
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;\
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;\
   cursor: pointer;\
   user-select: none;\
   -webkit-user-select: none;\
   touch-action: pan-y;\
   overflow: hidden;\
-  max-height: 52px;\
-  /* 关键：限制宽度，避免遮挡过多按钮。未点开状态更窄 */\
+  max-height: 46px;\
   width: auto;\
-  min-width: 140px;\
-  max-width: 200px;\
-  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),\
-              width 0.4s cubic-bezier(0.4, 0, 0.2, 1),\
-              max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),\
-              opacity 0.3s ease,\
-              transform 0.3s ease;\
+  min-width: 136px;\
+  max-width: 196px;\
+  /* iPhone 风格 spring 动画 */\
+  transition: max-height 0.5s cubic-bezier(0.16, 1, 0.3, 1),\
+              width 0.5s cubic-bezier(0.16, 1, 0.3, 1),\
+              max-width 0.5s cubic-bezier(0.16, 1, 0.3, 1),\
+              border-radius 0.5s cubic-bezier(0.16, 1, 0.3, 1),\
+              opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1),\
+              transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);\
   opacity: 1;\
 }\
 #rmp-island.rmp-island-hidden {\
   opacity: 0;\
-  transform: translateX(-50%) translateY(-100%);\
+  transform: translateX(-50%) translateY(-120%);\
   pointer-events: none;\
 }\
 #rmp-island.rmp-island-expanded {\
-  max-height: 220px;\
-  width: 300px;\
-  max-width: 300px;\
+  max-height: 244px;\
+  width: 312px;\
+  max-width: 312px;\
+  border-radius: 32px;\
 }\
-/* 最小化：缩成顶部一条细线 */\
+/* 最小化 */\
 #rmp-island.rmp-island-minimized {\
-  max-height: 4px;\
-  min-height: 4px;\
-  width: 80px;\
-  min-width: 80px;\
-  max-width: 80px;\
-  border-radius: 2px;\
-  opacity: 0.45;\
+  max-height: 3px;\
+  min-height: 3px;\
+  width: 72px;\
+  min-width: 72px;\
+  max-width: 72px;\
+  border-radius: 1.5px;\
+  opacity: 0.4;\
   cursor: pointer;\
   overflow: hidden;\
-  transition: max-height 0.3s ease, width 0.3s ease, max-width 0.3s ease, min-width 0.3s ease, border-radius 0.3s ease;\
+  transition: max-height 0.35s ease, width 0.35s ease, max-width 0.35s ease, min-width 0.35s ease, border-radius 0.35s ease;\
 }\
 #rmp-island.rmp-island-minimized .rmp-island-pill,\
 #rmp-island.rmp-island-minimized .rmp-island-expanded-content {\
@@ -715,32 +725,35 @@
 }\
 @media (max-width: 600px) {\
   #rmp-island {\
-    max-width: 170px;\
-    min-width: 120px;\
+    max-width: 168px;\
+    min-width: 116px;\
   }\
   #rmp-island.rmp-island-expanded {\
-    width: 88vw;\
-    max-width: 88vw;\
+    width: 86vw;\
+    max-width: 86vw;\
   }\
 }\
+/* 胶囊内容区 */\
 .rmp-island-pill {\
   display: flex;\
   align-items: center;\
-  gap: 8px;\
-  padding: 8px 10px;\
-  height: 52px;\
+  gap: 7px;\
+  padding: 7px 9px;\
+  height: 46px;\
   box-sizing: border-box;\
 }\
+/* 封面：微光泽，带阴影 */\
 .rmp-island-cover {\
-  width: 34px;\
-  height: 34px;\
-  border-radius: 8px;\
+  width: 30px;\
+  height: 30px;\
+  border-radius: 7px;\
   object-fit: cover;\
   flex-shrink: 0;\
-  background: rgba(255,255,255,0.1);\
+  background: rgba(255,255,255,0.06);\
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);\
 }\
 .rmp-island-cover.rmp-spinning {\
-  animation: rmp-island-spin 8s linear infinite;\
+  animation: rmp-island-spin 10s linear infinite;\
 }\
 @keyframes rmp-island-spin {\
   from { transform: rotate(0deg); }\
@@ -750,65 +763,30 @@
   flex: 1;\
   overflow: hidden;\
   min-width: 0;\
-  /* 滚动展示容器 */\
   position: relative;\
 }\
-/* 未点开状态：歌名/歌词滚动展示区 */\
 .rmp-island-scroll-text {\
   font-size: 12px;\
-  font-weight: 600;\
+  font-weight: 500;\
+  letter-spacing: -0.01em;\
   white-space: nowrap;\
   overflow: hidden;\
-  line-height: 34px;\
+  line-height: 30px;\
   position: relative;\
 }\
 .rmp-island-scroll-inner {\
   display: inline-block;\
-  padding-right: 40px;\
-  animation: rmp-scroll-left 12s linear infinite;\
+  padding-right: 36px;\
+  animation: rmp-scroll-left 14s linear infinite;\
 }\
 @keyframes rmp-scroll-left {\
   0% { transform: translateX(0); }\
   100% { transform: translateX(-100%); }\
 }\
-.rmp-island-artist {\
-  font-size: 11px;\
-  opacity: 0.6;\
-  white-space: nowrap;\
-  overflow: hidden;\
-  text-overflow: ellipsis;\
-  line-height: 1.2;\
-}\
-/* 关闭按钮（胶囊状悬浮球上的 X）——加大触摸区域，始终可见 */\
-.rmp-island-close {\
-  width: 20px;\
-  height: 20px;\
-  flex-shrink: 0;\
-  display: flex;\
-  align-items: center;\
-  justify-content: center;\
-  border-radius: 50%;\
-  background: transparent;\
-  cursor: pointer;\
-  opacity: 0.3;\
-  transition: opacity 0.25s ease, background 0.2s ease, transform 0.15s ease;\
-}\
-.rmp-island-close:hover {\
-  opacity: 0.7;\
-  background: rgba(255,80,80,0.25);\
-}\
-.rmp-island-close:active {\
-  transform: scale(0.85);\
-}\
-.rmp-island-close svg {\
-  width: 11px;\
-  height: 11px;\
-  fill: #fff;\
-  opacity: 0.85;\
-}\
+/* 播放/暂停按钮 —— 极度低调 */\
 .rmp-island-play-btn {\
-  width: 20px;\
-  height: 20px;\
+  width: 22px;\
+  height: 22px;\
   flex-shrink: 0;\
   display: flex;\
   align-items: center;\
@@ -816,83 +794,142 @@
   border-radius: 50%;\
   background: transparent;\
   cursor: pointer;\
-  opacity: 0.3;\
+  opacity: 0.28;\
   border: none;\
   padding: 0;\
-  transition: opacity 0.25s ease, transform 0.15s ease;\
+  transition: opacity 0.3s ease, transform 0.15s ease;\
 }\
 .rmp-island-play-btn:hover {\
-  opacity: 0.7;\
+  opacity: 0.6;\
 }\
 .rmp-island-play-btn:active {\
   transform: scale(0.85);\
 }\
 .rmp-island-play-btn svg {\
-  width: 11px;\
-  height: 11px;\
+  width: 10px;\
+  height: 10px;\
   fill: #fff;\
-  opacity: 0.8;\
+  opacity: 0.85;\
 }\
+/* 关闭按钮 —— 极度低调 */\
+.rmp-island-close {\
+  width: 22px;\
+  height: 22px;\
+  flex-shrink: 0;\
+  display: flex;\
+  align-items: center;\
+  justify-content: center;\
+  border-radius: 50%;\
+  background: transparent;\
+  cursor: pointer;\
+  opacity: 0.25;\
+  transition: opacity 0.3s ease, background 0.2s ease, transform 0.15s ease;\
+}\
+.rmp-island-close:hover {\
+  opacity: 0.6;\
+  background: rgba(255, 72, 72, 0.2);\
+}\
+.rmp-island-close:active {\
+  transform: scale(0.85);\
+}\
+.rmp-island-close svg {\
+  width: 10px;\
+  height: 10px;\
+  fill: #fff;\
+  opacity: 0.85;\
+}\
+/* 展开内容区 */\
 .rmp-island-expanded-content {\
-  padding: 0 14px 10px;\
+  padding: 0 14px 12px;\
   opacity: 0;\
-  transition: opacity 0.3s ease 0.15s;\
+  transform: translateY(4px);\
+  transition: opacity 0.35s ease 0.12s, transform 0.35s ease 0.12s;\
 }\
 #rmp-island.rmp-island-expanded .rmp-island-expanded-content {\
   opacity: 1;\
+  transform: translateY(0);\
 }\
 .rmp-island-lyrics {\
   text-align: center;\
-  padding: 4px 0 6px;\
+  padding: 6px 0 8px;\
 }\
-.rmp-lyric-prev, .rmp-lyric-next {\
+.rmp-lyric-prev,\
+.rmp-lyric-next {\
   font-size: 11px;\
-  opacity: 0.35;\
+  opacity: 0.3;\
   white-space: nowrap;\
   overflow: hidden;\
   text-overflow: ellipsis;\
   padding: 2px 0;\
-  line-height: 1.4;\
+  line-height: 1.5;\
 }\
 .rmp-lyric-current {\
-  font-size: 13px;\
+  font-size: 14px;\
   font-weight: 600;\
-  color: #C20C0C;\
+  letter-spacing: -0.01em;\
+  color: #ff3b3b;\
   white-space: nowrap;\
   overflow: hidden;\
   text-overflow: ellipsis;\
   padding: 4px 0;\
-  line-height: 1.4;\
+  line-height: 1.5;\
 }\
 .rmp-lyric-current-translation {\
   font-size: 11px;\
-  opacity: 0.6;\
+  opacity: 0.55;\
   white-space: nowrap;\
   overflow: hidden;\
   text-overflow: ellipsis;\
   padding: 1px 0;\
 }\
+/* 进度条 —— 极细精致 */\
 .rmp-island-progress {\
-  height: 3px;\
-  background: rgba(255, 255, 255, 0.15);\
-  border-radius: 2px;\
-  margin-top: 4px;\
+  height: 2px;\
+  background: rgba(255, 255, 255, 0.08);\
+  border-radius: 1px;\
+  margin-top: 6px;\
   cursor: pointer;\
   position: relative;\
+  overflow: visible;\
+}\
+.rmp-island-progress::before {\
+  content: "";\
+  position: absolute;\
+  inset: -8px 0;\
 }\
 .rmp-island-progress-fill {\
   height: 100%;\
-  background: #C20C0C;\
-  border-radius: 2px;\
+  background: linear-gradient(90deg, #ff3b3b, #ff6b6b);\
+  border-radius: 1px;\
   width: 0%;\
-  transition: width 0.2s linear;\
+  transition: width 0.15s linear;\
+  position: relative;\
+}\
+.rmp-island-progress-fill::after {\
+  content: "";\
+  position: absolute;\
+  right: -3px;\
+  top: 50%;\
+  transform: translateY(-50%);\
+  width: 6px;\
+  height: 6px;\
+  background: #fff;\
+  border-radius: 50%;\
+  opacity: 0;\
+  transition: opacity 0.2s;\
+  box-shadow: 0 0 6px rgba(255, 59, 59, 0.4);\
+}\
+.rmp-island-progress:hover .rmp-island-progress-fill::after {\
+  opacity: 1;\
 }\
 .rmp-island-time {\
   display: flex;\
   justify-content: space-between;\
   font-size: 10px;\
-  opacity: 0.5;\
-  margin-top: 4px;\
+  font-weight: 500;\
+  opacity: 0.4;\
+  margin-top: 5px;\
+  letter-spacing: 0.02em;\
 }\
 ';
   }
@@ -2271,9 +2308,15 @@
             <div class="rmp-toggle rmp-island-visible-toggle" role="switch"></div>\
           </div>\
         </div>\
+        <div class="rmp-settings-group">\
+          <div class="rmp-toggle-row">\
+            <span class="rmp-toggle-label">完整歌词注入（全部歌词+标注当前10行范围）</span>\
+            <div class="rmp-toggle rmp-lyrics-full-toggle" role="switch"></div>\
+          </div>\
+        </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.2.3</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.3.0</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -2338,6 +2381,7 @@
       islandScrollModeSelect: root.querySelector('.rmp-island-scroll-mode-select'),
       saveSettingsBtn: root.querySelector('.rmp-save-settings-btn'),
       resetIslandBtn: root.querySelector('.rmp-reset-island-btn'),
+      lyricsFullToggle: root.querySelector('.rmp-lyrics-full-toggle'),
       // 顶部栏
       closeBtn: root.querySelector('.rmp-close-btn')
     };
@@ -2351,6 +2395,7 @@
     STATE.appRefs.islandScrollModeSelect.value = STATE.islandScrollMode;
     // 初始化开关状态
     if (STATE.islandVisible) STATE.appRefs.islandVisibleToggle.classList.add('on');
+    if (STATE.lyricsFullInject) STATE.appRefs.lyricsFullToggle.classList.add('on');
 
     bindAppEvents();
     updateAppSongInfo();
@@ -2562,6 +2607,15 @@
     }
     refs.islandVisibleToggle.addEventListener('click', onIslandVisibleToggle);
     STATE.appCleanups.push(function () { refs.islandVisibleToggle.removeEventListener('click', onIslandVisibleToggle); });
+
+    // 歌词注入模式开关
+    function onLyricsFullToggle() {
+      STATE.lyricsFullInject = !STATE.lyricsFullInject;
+      refs.lyricsFullToggle.classList.toggle('on', STATE.lyricsFullInject);
+      saveSettings();
+    }
+    refs.lyricsFullToggle.addEventListener('click', onLyricsFullToggle);
+    STATE.appCleanups.push(function () { refs.lyricsFullToggle.removeEventListener('click', onLyricsFullToggle); });
 
     // 保存设置
     function onSaveSettings() {
@@ -3008,6 +3062,7 @@
     if (refs.islandTopInput) refs.islandTopInput.value = STATE.islandTop;
     if (refs.islandScrollModeSelect) refs.islandScrollModeSelect.value = STATE.islandScrollMode;
     if (refs.islandVisibleToggle) refs.islandVisibleToggle.classList.toggle('on', !!STATE.islandVisible);
+    if (refs.lyricsFullToggle) refs.lyricsFullToggle.classList.toggle('on', !!STATE.lyricsFullInject);
   }
 
   // 保存设置到 roche.storage（顺序调用，避免并发导致持久化失败）
@@ -3022,6 +3077,7 @@
       STATE.roche.storage.set('rmp_island_top', String(STATE.islandTop));
       STATE.roche.storage.set('rmp_island_visible', STATE.islandVisible ? '1' : '0');
       STATE.roche.storage.set('rmp_island_scroll_mode', STATE.islandScrollMode);
+      STATE.roche.storage.set('rmp_lyrics_full_inject', STATE.lyricsFullInject ? '1' : '0');
       STATE.roche.storage.set('rmp_agreed_disclaimer', '1');
       if (STATE.cookie) STATE.roche.storage.set('rmp_cookie', STATE.cookie);
       if (STATE.userProfile) STATE.roche.storage.set('rmp_user_profile', JSON.stringify(STATE.userProfile));
@@ -3044,7 +3100,8 @@
       roche.storage.get('rmp_island_scroll_mode'),
       roche.storage.get('rmp_playlist'),
       roche.storage.get('rmp_agreed_disclaimer'),
-      roche.storage.get('rmp_extended_sources')
+      roche.storage.get('rmp_extended_sources'),
+      roche.storage.get('rmp_lyrics_full_inject')
     ]).then(function (results) {
       if (results[0]) STATE.backend = results[0];
       if (results[1]) STATE.defaultSource = results[1];
@@ -3073,6 +3130,10 @@
           }
         } catch (e) {}
       }
+      // 歌词注入模式
+      if (results[13] !== null && results[13] !== undefined && results[13] !== '') {
+        STATE.lyricsFullInject = results[13] === '1';
+      }
     }).catch(function () {});
   }
 
@@ -3094,7 +3155,6 @@
     var currentLyric = '';
     if (STATE.lyrics && STATE.lyrics.length > 0 && STATE.currentLyricIndex >= 0) {
       currentLyric = STATE.lyrics[STATE.currentLyricIndex].text;
-      // 加上翻译
       if (STATE.tlyrics && STATE.tlyrics.length > 0) {
         var tIdx = getCurrentLyricIndex(STATE.tlyrics, STATE.audio.currentTime);
         if (tIdx >= 0 && STATE.tlyrics[tIdx]) {
@@ -3104,15 +3164,32 @@
     }
     result += 'user当前听到的歌词：' + (currentLyric || '（纯音乐或暂无歌词）') + '\n\n';
 
-    // 完整歌词（只注入当前句前后各 5 行，共 11 行，减少 token 占用）
+    // 歌词注入
     if (STATE.lyrics && STATE.lyrics.length > 0) {
       var curIdx = STATE.currentLyricIndex;
-      var start = Math.max(0, (curIdx >= 0 ? curIdx : 0) - 5);
-      var end = Math.min(STATE.lyrics.length, (curIdx >= 0 ? curIdx : 0) + 6);
-      result += '完整歌词（user当前听到第 ' + (curIdx + 1) + ' 句，标注【当前】，仅显示前后5行）：\n';
-      for (var i = start; i < end; i++) {
-        var prefix = (i === curIdx) ? '【当前】' : '';
-        result += prefix + (STATE.lyrics[i].text || '...') + '\n';
+      if (curIdx < 0) curIdx = 0;
+
+      if (STATE.lyricsFullInject) {
+        // 模式B：全部歌词 + 标注当前10行范围
+        result += '完整歌词（标注【>>>...<<<】范围为user当前听到的10行，【当前】为正在唱的一句）：\n';
+        var rangeStart = Math.max(0, curIdx - 5);
+        var rangeEnd = Math.min(STATE.lyrics.length - 1, curIdx + 4);
+        for (var i = 0; i < STATE.lyrics.length; i++) {
+          var markers = '';
+          if (i === rangeStart) markers += '【>>>';
+          if (i === curIdx) markers += '【当前】';
+          if (i === rangeEnd) markers += '<<<】';
+          result += markers + (STATE.lyrics[i].text || '...') + '\n';
+        }
+      } else {
+        // 模式A（默认）：仅注入当前前后各5行
+        var start = Math.max(0, curIdx - 5);
+        var end = Math.min(STATE.lyrics.length, curIdx + 6);
+        result += '歌词（user当前听到第 ' + (curIdx + 1) + ' 句，标注【当前】，仅显示前后5行）：\n';
+        for (var j = start; j < end; j++) {
+          var pfx = (j === curIdx) ? '【当前】' : '';
+          result += pfx + (STATE.lyrics[j].text || '...') + '\n';
+        }
       }
     }
 
@@ -3126,7 +3203,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.2.3',
+    version: '1.3.0',
 
     apps: [{
       id: 'roche-music-player-home',
