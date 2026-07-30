@@ -1820,6 +1820,38 @@
   max-width: 280px;\
   line-height: 1.5;\
 }\
+/* 用户卡片（已登录状态）*/\
+.rmp-user-card {\
+  display: flex;\
+  align-items: center;\
+  gap: 14px;\
+  padding: 16px;\
+  background: rgba(194,12,12,0.06);\
+  border: 1px solid rgba(194,12,12,0.15);\
+  border-radius: 12px;\
+}\
+.rmp-user-avatar {\
+  width: 52px;\
+  height: 52px;\
+  border-radius: 50%;\
+  object-fit: cover;\
+  border: 2px solid rgba(194,12,12,0.3);\
+  background: rgba(255,255,255,0.05);\
+}\
+.rmp-user-name {\
+  font-size: 16px;\
+  font-weight: 600;\
+  color: #fff;\
+  margin-bottom: 4px;\
+}\
+.rmp-user-badge {\
+  font-size: 11px;\
+  color: rgba(194,12,12,0.8);\
+}\
+.rmp-user-badge.vip {\
+  color: #C20C0C;\
+  font-weight: 600;\
+}\
 .rmp-loading {\
   text-align: center;\
   padding: 40px 0;\
@@ -2133,13 +2165,28 @@
     <!-- 登录面板 -->\
     <div class="rmp-panel" data-panel="login">\
       <div class="rmp-login-area">\
-        <div class="rmp-login-info">使用网易云音乐 APP 扫描下方二维码登录，登录后可获取更高音质及个人歌单</div>\
-        <div class="rmp-qr-container">\
-          <img class="rmp-qr-img" alt="二维码" style="display:none;" />\
-          <div class="rmp-qr-placeholder" style="color:#999;font-size:13px;">点击下方按钮获取二维码</div>\
+        <!-- 未登录状态 -->\
+        <div class="rmp-login-state rmp-login-not-logged">\
+          <div class="rmp-login-info">使用网易云音乐 APP 扫描二维码登录，登录后可使用个人歌单及更高音质</div>\
+          <div class="rmp-qr-container">\
+            <img class="rmp-qr-img" alt="二维码" style="display:none;" />\
+            <div class="rmp-qr-placeholder" style="color:#999;font-size:13px;">点击下方按钮获取二维码</div>\
+          </div>\
+          <div class="rmp-login-status"></div>\
+          <button class="rmp-btn rmp-qr-refresh-btn">获取二维码</button>\
         </div>\
-        <div class="rmp-login-status"></div>\
-        <button class="rmp-btn rmp-qr-refresh-btn">获取二维码</button>\
+        <!-- 已登录状态 -->\
+        <div class="rmp-login-state rmp-login-logged" style="display:none;">\
+          <div class="rmp-user-card">\
+            <img class="rmp-user-avatar" alt="头像" />\
+            <div class="rmp-user-info">\
+              <div class="rmp-user-name"></div>\
+              <div class="rmp-user-badge"></div>\
+            </div>\
+          </div>\
+          <div class="rmp-login-status" style="margin-top:10px;"></div>\
+          <button class="rmp-btn rmp-btn-secondary rmp-logout-btn" style="margin-top:12px;">退出登录</button>\
+        </div>\
       </div>\
     </div>\
     <!-- 设置面板 -->\
@@ -2249,6 +2296,12 @@
       qrPlaceholder: root.querySelector('.rmp-qr-placeholder'),
       loginStatus: root.querySelector('.rmp-login-status'),
       qrRefreshBtn: root.querySelector('.rmp-qr-refresh-btn'),
+      loginNotLogged: root.querySelector('.rmp-login-not-logged'),
+      loginLogged: root.querySelector('.rmp-login-logged'),
+      userAvatar: root.querySelector('.rmp-user-avatar'),
+      userName: root.querySelector('.rmp-user-name'),
+      userBadge: root.querySelector('.rmp-user-badge'),
+      logoutBtn: root.querySelector('.rmp-logout-btn'),
       // 设置
       backendInput: root.querySelector('.rmp-backend-input'),
       defaultSourceSelect: root.querySelector('.rmp-default-source-select'),
@@ -2454,6 +2507,8 @@
     // 登录
     refs.qrRefreshBtn.addEventListener('click', startQrLogin);
     STATE.appCleanups.push(function () { refs.qrRefreshBtn.removeEventListener('click', startQrLogin); });
+    refs.logoutBtn.addEventListener('click', doLogout);
+    STATE.appCleanups.push(function () { refs.logoutBtn.removeEventListener('click', doLogout); });
 
     // 关闭按钮
     function onCloseClick() {
@@ -2871,6 +2926,56 @@
     refs.playlistItems.innerHTML = html;
   }
 
+  // 获取网易云用户信息
+  function fetchUserInfo() {
+    if (!STATE.cookie) return Promise.resolve(null);
+    return api('netease_user_info', {}).then(function (data) {
+      if (data && data.profile) {
+        STATE.userProfile = data.profile;
+        saveSettings();
+        return data.profile;
+      }
+      return null;
+    }).catch(function () { return null; });
+  }
+
+  // 更新登录面板 UI
+  function updateLoginUI() {
+    var refs = STATE.appRefs;
+    if (!refs.loginNotLogged) return;
+    if (STATE.cookie && STATE.userProfile) {
+      // 已登录状态
+      refs.loginNotLogged.style.display = 'none';
+      refs.loginLogged.style.display = '';
+      refs.userAvatar.src = STATE.userProfile.avatarUrl;
+      refs.userName.textContent = STATE.userProfile.nickname;
+      if (STATE.userProfile.vipType > 0) {
+        refs.userBadge.textContent = 'VIP会员';
+        refs.userBadge.className = 'rmp-user-badge vip';
+      } else {
+        refs.userBadge.textContent = '网易云音乐用户';
+        refs.userBadge.className = 'rmp-user-badge';
+      }
+      refs.loginStatus.textContent = '已登录';
+      refs.loginStatus.className = 'rmp-login-status success';
+    } else {
+      // 未登录状态
+      refs.loginNotLogged.style.display = '';
+      refs.loginLogged.style.display = 'none';
+      refs.loginStatus.textContent = '';
+      refs.loginStatus.className = 'rmp-login-status';
+    }
+  }
+
+  // 退出登录
+  function doLogout() {
+    STATE.cookie = '';
+    STATE.userProfile = null;
+    saveSettings();
+    updateLoginUI();
+    if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('已退出网易云登录');
+  }
+
   // 网易云扫码登录
   function startQrLogin() {
     var refs = STATE.appRefs;
@@ -2922,7 +3027,7 @@
               refs.loginStatus.className = 'rmp-login-status';
               break;
             case 803:
-              refs.loginStatus.textContent = '登录成功';
+              refs.loginStatus.textContent = '登录成功，正在获取信息...';
               refs.loginStatus.className = 'rmp-login-status success';
               if (result.cookie) {
                 STATE.cookie = result.cookie;
@@ -2930,7 +3035,15 @@
               }
               clearInterval(STATE.qrPollTimer);
               STATE.qrPollTimer = null;
-              if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功');
+              // 获取用户信息并刷新 UI
+              fetchUserInfo().then(function (profile) {
+                updateLoginUI();
+                if (profile) {
+                  if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功：' + profile.nickname);
+                } else {
+                  if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功');
+                }
+              });
               break;
           }
         }).catch(function () {
@@ -2989,6 +3102,9 @@
       if (STATE.cookie) {
         STATE.roche.storage.set('rmp_cookie', STATE.cookie);
       }
+      if (STATE.userProfile) {
+        try { STATE.roche.storage.set('rmp_user_profile', JSON.stringify(STATE.userProfile)); } catch (e) {}
+      }
     } catch (e) {}
   }
 
@@ -3002,6 +3118,7 @@
       Promise.resolve(roche.storage.get('rmp_volume')),
       Promise.resolve(roche.storage.get('rmp_play_mode')),
       Promise.resolve(roche.storage.get('rmp_cookie')),
+      Promise.resolve(roche.storage.get('rmp_user_profile')),
       Promise.resolve(roche.storage.get('rmp_island_top')),
       Promise.resolve(roche.storage.get('rmp_island_visible')),
       Promise.resolve(roche.storage.get('rmp_island_scroll_mode')),
@@ -3015,20 +3132,22 @@
       if (results[3]) STATE.volume = parseFloat(results[3]) || 0.8;
       if (results[4]) STATE.playMode = results[4];
       if (results[5]) STATE.cookie = results[5];
-      if (results[6]) {
-        var t = parseInt(results[6], 10);
+      // 恢复用户信息（JSON）
+      if (results[6]) { try { STATE.userProfile = JSON.parse(results[6]); } catch (e) {} }
+      if (results[7]) {
+        var t = parseInt(results[7], 10);
         if (!isNaN(t)) STATE.islandTop = Math.max(0, Math.min(100, t));
       }
-      if (results[7] !== null && results[7] !== undefined && results[7] !== '') {
-        STATE.islandVisible = results[7] === '1';
+      if (results[8] !== null && results[8] !== undefined && results[8] !== '') {
+        STATE.islandVisible = results[8] === '1';
       }
-      if (results[8] === 'lyric' || results[8] === 'title') {
-        STATE.islandScrollMode = results[8];
+      if (results[9] === 'lyric' || results[9] === 'title') {
+        STATE.islandScrollMode = results[9];
       }
       // 加载持久化播放列表
-      if (results[9]) {
+      if (results[10]) {
         try {
-          var saved = JSON.parse(results[9]);
+          var saved = JSON.parse(results[10]);
           if (Array.isArray(saved) && saved.length > 0) {
             STATE.playlist = saved;
           }
@@ -3089,7 +3208,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.0.12',
+    version: '1.0.13',
 
     apps: [{
       id: 'roche-music-player-home',
@@ -3114,6 +3233,12 @@
               STATE.appRefs.agreeCheckbox.checked = STATE.hasAgreedDisclaimer;
             }
             updateDisclaimerLockUI();
+            // 恢复登录 UI（有 cookie 则尝试拉用户信息）
+            if (STATE.cookie && STATE.userProfile) {
+              updateLoginUI();
+            } else if (STATE.cookie) {
+              fetchUserInfo().then(function () { updateLoginUI(); });
+            }
             STATE.initialized = true;
           }).catch(function (e) {
             STATE.initialized = true;
