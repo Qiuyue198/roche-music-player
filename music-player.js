@@ -227,8 +227,21 @@
     if (!lyricId) return Promise.resolve({ lyric: '', tlyric: '' });
     // 去掉可能的 source: 前缀
     var cleanId = String(lyricId).indexOf(':') >= 0 ? String(lyricId).split(':').pop() : String(lyricId);
-    // 扩展音源走 GD API 直连
+    // 扩展音源走 GD API 直连（joox），bilibili 走 Vercel 字幕接口
     if (STATE.useExtendedSources && (source === 'joox' || source === 'bilibili')) {
+      // bilibili 通过 Vercel 获取 B站 CC 字幕并转 LRC
+      if (source === 'bilibili') {
+        return fetch('https://vercel.chajianreader.cc.cd/music?action=bilibili_subtitle&bvid=' + encodeURIComponent(cleanId))
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            if (data.available && data.lyric) {
+              return { lyric: data.lyric, tlyric: '' };
+            }
+            return { lyric: '', tlyric: '' };
+          })
+          .catch(function () { return { lyric: '', tlyric: '' }; });
+      }
+      // joox 走 GD API
       return gdApi('lyric', { id: cleanId, source: source }).then(function (data) {
         return { lyric: data.lyric || data.lrc || '', tlyric: data.tlyric || '' };
       });
