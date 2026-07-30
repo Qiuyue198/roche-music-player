@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.2.0';
+  var BUILD_TIME = '2026-07-30-v1.2.1';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -123,7 +123,7 @@
     return fetch(url, { headers: headers }).then(function (res) { return res.json(); });
   }
 
-  // 搜索音乐 —— 始终走全平台 search_all，过滤无歌词歌曲，优先有歌词+网易云
+  // 搜索音乐 —— 全平台 / 单源轮询（网易云最多重试10次）
   function searchMusic(keywords, source, limit) {
     limit = limit || 20;
 
@@ -146,7 +146,54 @@
       });
     }
 
-    // 并发轮询 search_all
+    // 单源轮询：最多重试 maxRetries 次
+    function pollSingle(src, retries, maxRetries) {
+      retries = retries || 0;
+      maxRetries = maxRetries || 4;
+      // 网易云有cookie走原生，否则走GD单源
+      if (src === 'netease' && STATE.cookie) {
+        return api('netease_native_search', { keywords: keywords, limit: limit }).then(function (data) {
+          var songs = data.songs || data.results || [];
+          if (songs.length > 0) {
+            return songs.map(function (s) {
+              return {
+                id: String(s.id), name: s.name || '',
+                artist: (s.ar || []).map(function (a) { return a.name; }).join(' / '),
+                album: s.al ? s.al.name : '', picId: s.al ? s.al.picUrl : '',
+                lyricId: String(s.id), cover: s.al ? s.al.picUrl : '',
+                duration: Math.round((s.dt || 0) / 1000), platform: 'netease'
+              };
+            });
+          }
+          if (retries < maxRetries) {
+            return new Promise(function (resolve) {
+              setTimeout(function () { resolve(pollSingle(src, retries + 1, maxRetries)); }, 800 + retries * 400);
+            });
+          }
+          return [];
+        }).catch(function () { return []; });
+      }
+      // GD API 单源搜索
+      return api('search', { source: src, keywords: keywords, limit: limit }).then(function (data) {
+        var songs = data.songs || data.results || [];
+        if (songs.length > 0) return songs.map(function (s) { return normalizeSong(s); });
+        if (retries < maxRetries) {
+          return new Promise(function (resolve) {
+            setTimeout(function () { resolve(pollSingle(src, retries + 1, maxRetries)); }, 800 + retries * 400);
+          });
+        }
+        return [];
+      }).catch(function () {
+        if (retries < maxRetries) {
+          return new Promise(function (resolve) {
+            setTimeout(function () { resolve(pollSingle(src, retries + 1, maxRetries)); }, 800 + retries * 400);
+          });
+        }
+        return [];
+      });
+    }
+
+    // 全平台 search_all
     function pollSearchAll(retries) {
       retries = retries || 0;
       var MAX = 4;
@@ -173,7 +220,18 @@
       });
     }
 
-    // 登录网易云后额外走原生搜索
+    // 根据来源分发
+    if (source === 'netease') {
+      return pollSingle('netease', 0, 10).then(function (songs) {
+        return filterByLyrics(songs);
+      });
+    }
+    if (source === 'joox') {
+      return pollSingle('joox', 0, 4).then(function (songs) {
+        return filterByLyrics(songs);
+      });
+    }
+    // 全平台：search_all + 登录时额外原生网易云
     var nativePromise = Promise.resolve([]);
     if (STATE.cookie) {
       nativePromise = api('netease_native_search', { keywords: keywords, limit: limit }).then(function (data) {
@@ -189,11 +247,9 @@
         });
       }).catch(function () { return []; });
     }
-
     return Promise.all([pollSearchAll(0), nativePromise]).then(function (results) {
       var gdSongs = results[0] || [];
       var nativeSongs = results[1] || [];
-      // 合并：原生网易云优先
       var seen = {};
       var merged = [];
       nativeSongs.forEach(function (s) { seen[s.id + '|' + s.platform] = true; merged.push(s); });
@@ -201,7 +257,6 @@
         var key = s.id + '|' + s.platform;
         if (!seen[key]) { seen[key] = true; merged.push(s); }
       });
-      // 过滤无歌词的
       return filterByLyrics(merged);
     });
   }
@@ -723,56 +778,57 @@
 }\
 /* 关闭按钮（胶囊状悬浮球上的 X）——加大触摸区域，始终可见 */\
 .rmp-island-close {\
-  width: 28px;\
-  height: 28px;\
+  width: 26px;\
+  height: 26px;\
   flex-shrink: 0;\
   display: flex;\
   align-items: center;\
   justify-content: center;\
   border-radius: 50%;\
-  background: rgba(255,255,255,0.22);\
+  background: transparent;\
   cursor: pointer;\
-  opacity: 0.85;\
+  opacity: 0.5;\
   transition: opacity 0.2s ease, background 0.2s ease, transform 0.15s ease;\
 }\
 .rmp-island-close:hover {\
   opacity: 1;\
-  background: rgba(255,107,107,0.5);\
+  background: rgba(255,80,80,0.35);\
 }\
 .rmp-island-close:active {\
   transform: scale(0.85);\
 }\
 .rmp-island-close svg {\
-  width: 14px;\
-  height: 14px;\
+  width: 13px;\
+  height: 13px;\
   fill: #fff;\
 }\
 .rmp-island-play-btn {\
-  width: 28px;\
-  height: 28px;\
+  width: 26px;\
+  height: 26px;\
   flex-shrink: 0;\
   display: flex;\
   align-items: center;\
   justify-content: center;\
   border-radius: 50%;\
-  background: rgba(255,255,255,0.22);\
+  background: transparent;\
   cursor: pointer;\
-  opacity: 0.85;\
+  opacity: 0.55;\
   border: none;\
   padding: 0;\
   transition: opacity 0.2s ease, background 0.2s ease, transform 0.15s ease;\
 }\
 .rmp-island-play-btn:hover {\
   opacity: 1;\
-  background: rgba(194,12,12,0.4);\
+  background: rgba(194,12,12,0.2);\
 }\
 .rmp-island-play-btn:active {\
   transform: scale(0.85);\
 }\
 .rmp-island-play-btn svg {\
-  width: 15px;\
-  height: 15px;\
+  width: 14px;\
+  height: 14px;\
   fill: #fff;\
+  opacity: 0.85;\
 }\
 .rmp-island-expanded-content {\
   padding: 0 14px 10px;\
@@ -858,7 +914,7 @@
           <div class="rmp-island-scroll-text"><span class="rmp-island-scroll-inner">未播放</span></div>\
         </div>\
         <button class="rmp-island-play-btn" title="播放/暂停">' + ICONS.play + '</button>\
-        <div class="rmp-island-close" title="关闭">\
+        <div class="rmp-island-close" title="关闭灵动岛">\
           <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>\
         </div>\
       </div>\
@@ -908,10 +964,10 @@
 
     // 点击展开/收起（排除关闭、播放按钮和进度条）
     function onIslandClick(e) {
-      // 点击关闭按钮：最小化为顶部细线
+      // 点击关闭按钮：完全隐藏灵动岛（可被char点歌唤醒）
       if (e.target.closest('.rmp-island-close')) {
         e.stopPropagation();
-        minimizeIsland();
+        hideIsland();
         return;
       }
       // 点击播放/暂停按钮
@@ -2090,6 +2146,11 @@
     <div class="rmp-panel active" data-panel="search">\
       <div class="rmp-search-bar">\
         <input type="text" class="rmp-search-input" placeholder="输入歌曲名或歌手名..." />\
+        <select class="rmp-select rmp-search-source">\
+          <option value="all">全平台</option>\
+          <option value="joox">JOOX</option>\
+          <option value="netease">网易云</option>\
+        </select>\
         <button class="rmp-btn rmp-search-btn">搜索</button>\
       </div>\
       <div class="rmp-search-results"></div>\
@@ -2207,7 +2268,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.2.0</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.2.1</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -2229,6 +2290,7 @@
       panels: root.querySelectorAll('.rmp-panel'),
       // 搜索
       searchInput: root.querySelector('.rmp-search-input'),
+      searchSource: root.querySelector('.rmp-search-source'),
       searchBtn: root.querySelector('.rmp-search-btn'),
       searchResults: root.querySelector('.rmp-search-results'),
       // 正在播放
@@ -2315,9 +2377,10 @@
         if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('请输入搜索关键词');
         return;
       }
+      var source = refs.searchSource.value;
       STATE.isSearching = true;
       refs.searchResults.innerHTML = '<div class="rmp-loading"><div class="rmp-spinner"></div></div>';
-      searchMusic(keywords, 'all', 20).then(function (results) {
+      searchMusic(keywords, source, 20).then(function (results) {
         STATE.isSearching = false;
         STATE.searchResults = results;
         renderSearchResults();
