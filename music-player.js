@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.7.0';
+  var BUILD_TIME = '2026-07-30-v1.8.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -2472,6 +2472,13 @@
           <input type="text" class="rmp-settings-input rmp-backend-input" placeholder="https://..." />\
         </div>\
         <div class="rmp-settings-group">\
+          <label class="rmp-settings-label">网易云 Cookie（推荐：粘贴后直接登录，无需扫码）</label>\
+          <input type="text" class="rmp-settings-input rmp-cookie-input" placeholder="MUSIC_U=xxx; __csrf=xxx" />\
+          <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:4px;">\
+            获取方式：浏览器打开 music.163.com 登录 → F12 → Application → Cookies → 复制 MUSIC_U 和 __csrf 的值，粘贴为 MUSIC_U=值; __csrf=值 格式\
+          </div>\
+        </div>\
+        <div class="rmp-settings-group">\
           <label class="rmp-settings-label">默认音源</label>\
           <select class="rmp-select rmp-default-source-select" style="width:100%;">\
             <option value="joox">JOOX</option>\
@@ -2511,7 +2518,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.7.0</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.8.0</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -2569,6 +2576,7 @@
       logoutBtn: root.querySelector('.rmp-logout-btn'),
       // 设置
       backendInput: root.querySelector('.rmp-backend-input'),
+      cookieInput: root.querySelector('.rmp-cookie-input'),
       defaultSourceSelect: root.querySelector('.rmp-default-source-select'),
       qualitySelect: root.querySelector('.rmp-quality-select'),
       islandTopInput: root.querySelector('.rmp-island-top-input'),
@@ -2817,6 +2825,19 @@
       var backend = refs.backendInput.value.trim();
       if (backend) {
         STATE.backend = backend.replace(/\/+$/, '');
+      }
+      // 手动输入的 Cookie
+      var cookie = refs.cookieInput.value.trim();
+      if (cookie) {
+        STATE.cookie = cookie;
+        // 自动尝试获取用户信息
+        fetchUserInfo().then(function (profile) {
+          if (profile) {
+            STATE.userProfile = profile;
+            updateLoginUI();
+            STATE.roche && STATE.roche.ui && STATE.roche.ui.toast('Cookie 有效！已登录：' + profile.nickname);
+          }
+        });
       }
       STATE.defaultSource = refs.defaultSourceSelect.value;
       STATE.quality = refs.qualitySelect.value;
@@ -3256,6 +3277,7 @@
     var refs = STATE.appRefs;
     if (!refs.root) return;
     if (refs.backendInput) refs.backendInput.value = STATE.backend;
+    if (refs.cookieInput) refs.cookieInput.value = STATE.cookie || '';
     if (refs.defaultSourceSelect) refs.defaultSourceSelect.value = STATE.defaultSource;
     if (refs.qualitySelect) refs.qualitySelect.value = STATE.quality;
     if (refs.volumeSlider) refs.volumeSlider.value = STATE.volume;
@@ -3388,7 +3410,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.7.0',
+    version: '1.8.0',
 
     apps: [{
       id: 'roche-music-player-home',
