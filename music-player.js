@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.3.0';
+  var BUILD_TIME = '2026-07-30-v1.3.1';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -302,16 +302,40 @@
   }
 
   // 获取播放 URL（统一走 Vercel 后端，支持所有音源）
-  function getSongUrl(id, source) {
+  function getSongUrl(id, source, quality) {
     var cleanId = String(id).indexOf(':') >= 0 ? String(id).split(':').pop() : String(id);
+    var br = quality || STATE.quality;
     if (STATE.cookie && (source === 'netease')) {
-      return api('netease_native_url', { id: cleanId, br: STATE.quality }).then(function (data) {
+      return api('netease_native_url', { id: cleanId, br: br }).then(function (data) {
         return data.url || '';
       });
     }
-    return api('song_url', { id: cleanId, source: source, br: STATE.quality }).then(function (data) {
+    return api('song_url', { id: cleanId, source: source, br: br }).then(function (data) {
       return data.url || '';
     });
+  }
+
+  // 带降级重试的获取播放 URL（非网易云音源，从高到低尝试不同码率）
+  function getSongUrlFallback(id, source) {
+    var cleanId = String(id).indexOf(':') >= 0 ? String(id).split(':').pop() : String(id);
+    // 优先用用户选择的音质，失败则降级到 standard
+    var qualities = [STATE.quality];
+    if (STATE.quality !== 'standard') qualities.push('standard');
+    // 去重
+    var seen = {};
+    qualities = qualities.filter(function (q) { if (seen[q]) return false; seen[q] = true; return true; });
+
+    function tryNext(idx) {
+      if (idx >= qualities.length) return Promise.resolve('');
+      var br = qualities[idx];
+      return api('song_url', { id: cleanId, source: source, br: br }).then(function (data) {
+        if (data.url) return data.url;
+        return tryNext(idx + 1);
+      }).catch(function () {
+        return tryNext(idx + 1);
+      });
+    }
+    return tryNext(0);
   }
 
   // 获取专辑图（统一走 Vercel 后端）
@@ -387,7 +411,30 @@
       updateProgressUI();
     }
     // 错误事件
+    var audioRetryCount = 0;
     function onError() {
+      var song = STATE.currentSong;
+      // 第一次错误，尝试降级到 standard 码率重试（仅非网易云登录音源）
+      if (audioRetryCount === 0 && song && (!song.platform || song.platform !== 'netease' || !STATE.cookie)) {
+        audioRetryCount = 1;
+        getSongUrl(song.id, song.platform || 'joox', 'standard').then(function (url) {
+          if (STATE.currentSong !== song || !url) {
+            audioRetryCount = 0;
+            if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('播放出错，请尝试其他歌曲');
+            return;
+          }
+          STATE.audio.src = url;
+          STATE.audio.play().catch(function () {
+            audioRetryCount = 0;
+            if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('播放出错，请尝试其他歌曲');
+          });
+        }).catch(function () {
+          audioRetryCount = 0;
+          if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('播放出错，请尝试其他歌曲或音源');
+        });
+        return;
+      }
+      audioRetryCount = 0;
       if (STATE.roche && STATE.roche.ui) {
         STATE.roche.ui.toast('播放出错，请尝试其他歌曲或音源');
       }
@@ -446,8 +493,16 @@
     STATE.tlyrics = [];
     STATE.currentLyricIndex = -1;
 
-    // 获取播放 URL
-    getSongUrl(song.id, song.platform || STATE.defaultSource).then(function (url) {
+    // 获取播放 URL（非网易云音源使用降级重试）
+    var urlPromise;
+    if (song.platform === 'netease' && STATE.cookie) {
+      urlPromise = getSongUrl(song.id, 'netease');
+    } else if (song.platform === 'netease') {
+      urlPromise = getSongUrlFallback(song.id, 'netease');
+    } else {
+      urlPromise = getSongUrlFallback(song.id, song.platform || STATE.defaultSource);
+    }
+    urlPromise.then(function (url) {
       // 竞态条件修复：如果在异步等待期间用户切换了歌曲，则放弃本次播放
       if (STATE.currentSong !== song) return;
       if (!url) {
@@ -931,6 +986,80 @@
   margin-top: 5px;\
   letter-spacing: 0.02em;\
 }\
+/* 长按播放列表浮窗 */\
+.rmp-island-playlist-popup {\
+  position: fixed;\
+  z-index: 99998;\
+  background: rgba(18, 18, 18, 0.93);\
+  -webkit-backdrop-filter: blur(24px) saturate(180%);\
+  backdrop-filter: blur(24px) saturate(180%);\
+  border-radius: 18px;\
+  box-shadow: 0 8px 36px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(255, 255, 255, 0.08);\
+  max-height: 260px;\
+  overflow-y: auto;\
+  -webkit-overflow-scrolling: touch;\
+  min-width: 200px;\
+  max-width: 270px;\
+  padding: 6px;\
+  opacity: 0;\
+  transform: scale(0.92) translateY(-8px);\
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);\
+  pointer-events: none;\
+}\
+.rmp-island-playlist-popup.visible {\
+  opacity: 1;\
+  transform: scale(1) translateY(0);\
+  pointer-events: auto;\
+}\
+.rmp-island-playlist-popup::-webkit-scrollbar { width: 3px; }\
+.rmp-island-playlist-popup::-webkit-scrollbar-track { background: transparent; }\
+.rmp-island-playlist-popup::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }\
+.rmp-island-pl-item {\
+  display: flex;\
+  align-items: center;\
+  gap: 8px;\
+  padding: 8px 10px;\
+  border-radius: 12px;\
+  cursor: pointer;\
+  transition: background 0.12s ease;\
+  font-size: 12px;\
+  color: rgba(255, 255, 255, 0.75);\
+  white-space: nowrap;\
+  overflow: hidden;\
+}\
+.rmp-island-pl-item:active {\
+  background: rgba(255, 255, 255, 0.1);\
+}\
+.rmp-island-pl-item.current {\
+  color: #ff3b3b;\
+  font-weight: 600;\
+}\
+.rmp-island-pl-item .rmp-pl-num {\
+  width: 20px;\
+  text-align: center;\
+  font-size: 11px;\
+  opacity: 0.4;\
+  flex-shrink: 0;\
+}\
+.rmp-island-pl-item.current .rmp-pl-num {\
+  opacity: 1;\
+}\
+.rmp-island-pl-item .rmp-pl-name {\
+  flex: 1;\
+  overflow: hidden;\
+  text-overflow: ellipsis;\
+}\
+.rmp-island-pl-item .rmp-pl-dot {\
+  width: 5px;\
+  height: 5px;\
+  border-radius: 50%;\
+  background: #ff3b3b;\
+  flex-shrink: 0;\
+  opacity: 0;\
+}\
+.rmp-island-pl-item.current .rmp-pl-dot {\
+  opacity: 1;\
+}\
 ';
   }
 
@@ -1002,6 +1131,22 @@
       pill: island.querySelector('.rmp-island-pill')
     };
 
+    // 创建长按播放列表浮窗
+    if (!STATE.islandPlaylistPopup) {
+      STATE.islandPlaylistPopup = document.createElement('div');
+      STATE.islandPlaylistPopup.className = 'rmp-island-playlist-popup';
+      STATE.islandPlaylistPopup.style.display = 'none';
+      document.body.appendChild(STATE.islandPlaylistPopup);
+      // 点击浮窗外关闭
+      function onDocClick(e) {
+        if (STATE.islandPlaylistPopup && !STATE.islandPlaylistPopup.contains(e.target) && e.target !== island && !island.contains(e.target)) {
+          hideIslandPlaylistPopup();
+        }
+      }
+      document.addEventListener('click', onDocClick);
+      STATE.islandCleanups.push(function () { document.removeEventListener('click', onDocClick); });
+    }
+
     // 点击展开/收起（排除关闭、播放按钮和进度条）
     function onIslandClick(e) {
       // 点击关闭按钮：完全隐藏灵动岛（可被char点歌唤醒）
@@ -1064,7 +1209,7 @@
       STATE.islandRefs.progress.removeEventListener('touchstart', onProgressStart);
     });
 
-    // 移动端滑动切换歌曲 / 上下滑最小化 / 长按切歌
+    // 移动端滑动切换歌曲 / 上下滑最小化 / 长按弹出播放列表
     var touchStartX = 0;
     var touchStartY = 0;
     var longPressTimer = null;
@@ -1076,22 +1221,17 @@
       }
       // 排除关闭按钮、播放按钮和进度条上的长按
       if (e.target.closest('.rmp-island-close') || e.target.closest('.rmp-island-play-btn') || e.target.closest('.rmp-island-progress')) return;
-      // 长按检测：600ms 后切换歌曲
+      // 长按检测：600ms 后弹出播放列表浮窗
       longPressFired = false;
       clearTimeout(longPressTimer);
       longPressTimer = setTimeout(function () {
         longPressFired = true;
-        var halfW = island.getBoundingClientRect().width / 2;
-        if (touchStartX < halfW) {
-          playPrev();
-        } else {
-          playNext();
-        }
+        showIslandPlaylistPopup();
       }, 600);
     }
     function onTouchEnd(e) {
       clearTimeout(longPressTimer);
-      if (longPressFired) return; // 长按已触发，不处理滑动
+      if (longPressFired) return;
       if (!e.changedTouches || !e.changedTouches[0]) return;
       var dx = e.changedTouches[0].clientX - touchStartX;
       var dy = e.changedTouches[0].clientY - touchStartY;
@@ -1106,14 +1246,6 @@
           return;
         }
       }
-      // 水平滑动距离大于垂直，且超过 50px
-      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
-        if (dx > 0) {
-          playPrev();
-        } else {
-          playNext();
-        }
-      }
     }
     // 鼠标长按检测
     function onMouseDown(e) {
@@ -1122,18 +1254,12 @@
       clearTimeout(longPressTimer);
       longPressTimer = setTimeout(function () {
         longPressFired = true;
-        var halfW = island.getBoundingClientRect().width / 2;
-        if (e.clientX < halfW) {
-          playPrev();
-        } else {
-          playNext();
-        }
+        showIslandPlaylistPopup();
       }, 600);
     }
     function onMouseUp() {
       clearTimeout(longPressTimer);
       if (longPressFired) {
-        // 阻止后续 click 事件展开/收起
         longPressFired = false;
       }
     }
@@ -1158,9 +1284,74 @@
     STATE.islandExpanded = !STATE.islandExpanded;
     if (STATE.islandExpanded) {
       STATE.islandEl.classList.add('rmp-island-expanded');
+      hideIslandPlaylistPopup(); // 展开时关闭播放列表
     } else {
       STATE.islandEl.classList.remove('rmp-island-expanded');
     }
+  }
+
+  // 显示长按播放列表浮窗
+  function showIslandPlaylistPopup() {
+    if (!STATE.islandPlaylistPopup || STATE.playlist.length === 0) return;
+    // 获取灵动岛位置
+    var islandRect = STATE.islandEl.getBoundingClientRect();
+    var popup = STATE.islandPlaylistPopup;
+    // 渲染播放列表项
+    var html = '';
+    for (var i = 0; i < STATE.playlist.length; i++) {
+      var s = STATE.playlist[i];
+      var isCurrent = i === STATE.currentIndex;
+      html += '<div class="rmp-island-pl-item' + (isCurrent ? ' current' : '') + '" data-index="' + i + '">';
+      html += '<span class="rmp-pl-num">' + (isCurrent ? '♪' : (i + 1)) + '</span>';
+      html += '<span class="rmp-pl-name">' + escapeHtml(s.name || '') + ' - ' + escapeHtml(s.artist || '') + '</span>';
+      html += '<span class="rmp-pl-dot"></span>';
+      html += '</div>';
+    }
+    popup.innerHTML = html;
+    // 定位：灵动岛下方居中
+    var top = islandRect.bottom + 8;
+    var left = islandRect.left + islandRect.width / 2;
+    // 确保不超出屏幕
+    var pw = Math.min(270, islandRect.width + 40);
+    popup.style.minWidth = Math.max(180, pw - 20) + 'px';
+    popup.style.maxWidth = pw + 'px';
+    popup.style.top = top + 'px';
+    popup.style.left = left + 'px';
+    popup.style.transform = 'translateX(-50%) scale(0.92) translateY(-8px)';
+    popup.style.display = '';
+    // 触发动画
+    requestAnimationFrame(function () {
+      popup.classList.add('visible');
+    });
+    // 点击项目切歌
+    function onPopupClick(e) {
+      var item = e.target.closest('.rmp-island-pl-item');
+      if (!item) return;
+      var idx = parseInt(item.getAttribute('data-index'), 10);
+      if (!isNaN(idx) && STATE.playlist[idx]) {
+        playSong(STATE.playlist[idx], idx);
+      }
+      hideIslandPlaylistPopup();
+    }
+    popup._clickHandler = onPopupClick;
+    popup.addEventListener('click', onPopupClick);
+    // 如果灵动岛先被收起了，一并隐藏
+    STATE._popupVisible = true;
+  }
+
+  // 隐藏播放列表浮窗
+  function hideIslandPlaylistPopup() {
+    if (!STATE.islandPlaylistPopup) return;
+    var popup = STATE.islandPlaylistPopup;
+    popup.classList.remove('visible');
+    if (popup._clickHandler) {
+      popup.removeEventListener('click', popup._clickHandler);
+      popup._clickHandler = null;
+    }
+    STATE._popupVisible = false;
+    setTimeout(function () {
+      if (!STATE._popupVisible && popup) popup.style.display = 'none';
+    }, 250);
   }
 
   // 最小化灵动岛为顶部细线
@@ -1198,6 +1389,7 @@
       STATE.islandEl.classList.remove('rmp-island-expanded');
       STATE.islandExpanded = false;
       STATE.islandClosed = true;
+      hideIslandPlaylistPopup();
     }
   }
 
@@ -1323,6 +1515,11 @@
       STATE.islandStyleEl.parentNode.removeChild(STATE.islandStyleEl);
     }
     STATE.islandStyleEl = null;
+    if (STATE.islandPlaylistPopup && STATE.islandPlaylistPopup.parentNode) {
+      STATE.islandPlaylistPopup.parentNode.removeChild(STATE.islandPlaylistPopup);
+    }
+    STATE.islandPlaylistPopup = null;
+    STATE._popupVisible = false;
   }
 
   // ==================== 统一 UI 更新 ====================
@@ -2316,7 +2513,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.3.0</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.3.1</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3203,7 +3400,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.3.0',
+    version: '1.3.1',
 
     apps: [{
       id: 'roche-music-player-home',
