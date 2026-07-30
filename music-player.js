@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.1.0-poll';
+  var BUILD_TIME = '2026-07-30-v1.1.0-joox';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -17,7 +17,7 @@
     currentLyricIndex: -1,    // 当前歌词行索引
     cookie: '',               // 网易云 cookie
     backend: 'https://vercel.chajianreader.cc.cd', // 后端地址（Vercel，国内更稳定）
-    defaultSource: 'netease', // 默认音源
+    defaultSource: 'joox', // 默认音源
     quality: 'standard',      // 音质
     // 灵动岛相关
     islandEl: null,
@@ -170,14 +170,14 @@
       if (STATE.useExtendedSources) {
         if (source === 'all') {
           if (data.merged && data.merged.length) return data.merged.map(normalizeSong);
-          ['netease', 'joox', 'bilibili'].forEach(function (p) {
+          ['netease', 'joox'].forEach(function (p) {
             if (all[p]) all[p].forEach(function (s) { results.push(normalizeSong(s)); });
           });
         } else {
           if (all[source]) all[source].forEach(function (s) { results.push(normalizeSong(s)); });
         }
       } else {
-        if (all.netease) all.netease.forEach(function (s) { results.push(normalizeSong(s)); });
+        if (all.joox) all.joox.forEach(function (s) { results.push(normalizeSong(s)); });
       }
       return results;
     }
@@ -209,27 +209,11 @@
     return pollSearchAll(0);
   }
 
-  // 获取播放 URL（br 由后端映射 standard/high/lossless -> 320/740/999）
-  // id 必须是纯 track_id（不带 source: 前缀）
+  // 获取播放 URL（统一走 Vercel 后端，支持所有音源）
   function getSongUrl(id, source) {
-    // 防御性：去掉可能的 source: 前缀
     var cleanId = String(id).indexOf(':') >= 0 ? String(id).split(':').pop() : String(id);
-    // 登录网易云后：直接用原生网易云播放链接
     if (STATE.cookie && (source === 'netease')) {
       return api('netease_native_url', { id: cleanId, br: STATE.quality }).then(function (data) {
-        return data.url || '';
-      });
-    }
-    // 扩展音源走 GD API 直连
-    if (STATE.useExtendedSources && (source === 'joox' || source === 'bilibili')) {
-      // bilibili 只支持 128/320，joox 走标准 br 映射
-      var extBr;
-      if (source === 'bilibili') {
-        extBr = STATE.quality === 'standard' ? '128' : '320';
-      } else {
-        extBr = STATE.quality === 'standard' ? '320' : (STATE.quality === 'high' ? '740' : '999');
-      }
-      return gdApi('url', { source: source, id: cleanId, br: extBr }).then(function (data) {
         return data.url || '';
       });
     }
@@ -238,65 +222,27 @@
     });
   }
 
-  // 获取专辑图 URL（通过 pic_id 调用 GD 音乐台 pic 接口）
+  // 获取专辑图（统一走 Vercel 后端）
   function getPicUrl(picId, source) {
     if (!picId) return Promise.resolve('');
-    // 去掉可能的 source: 前缀
     var cleanId = String(picId).indexOf(':') >= 0 ? String(picId).split(':').pop() : String(picId);
-    // 扩展音源走 GD API 直连
-    if (STATE.useExtendedSources && (source === 'joox' || source === 'bilibili')) {
-      return gdApi('pic', { id: cleanId, source: source }).then(function (data) {
-        return data.url || '';
-      }).catch(function () { return ''; });
-    }
     return api('pic', { id: cleanId, source: source }).then(function (data) {
       return data.url || '';
     }).catch(function () { return ''; });
   }
 
-  // 获取歌词（使用 lyricId，一般与 track_id 相同）
+  // 获取歌词（统一走 Vercel 后端）
   function getLyric(lyricId, source) {
     if (!lyricId) return Promise.resolve({ lyric: '', tlyric: '' });
-    // 去掉可能的 source: 前缀
     var cleanId = String(lyricId).indexOf(':') >= 0 ? String(lyricId).split(':').pop() : String(lyricId);
-    // 登录网易云后：直接用原生网易云歌词
     if (STATE.cookie && (source === 'netease')) {
       return api('netease_native_lyric', { id: cleanId }).then(function (data) {
         return { lyric: data.lyric || '', tlyric: data.tlyric || '' };
       });
     }
-    // 扩展音源走 GD API 直连（joox），bilibili 走 Vercel 字幕接口
-    if (STATE.useExtendedSources && (source === 'joox' || source === 'bilibili')) {
-      // bilibili 通过 Vercel 获取 B站 CC 字幕并转 LRC
-      if (source === 'bilibili') {
-        return fetch('https://vercel.chajianreader.cc.cd/music?action=bilibili_subtitle&bvid=' + encodeURIComponent(cleanId))
-          .then(function (res) { return res.json(); })
-          .then(function (data) {
-            if (data.available && data.lyric) {
-              return { lyric: data.lyric, tlyric: '' };
-            }
-            return { lyric: '', tlyric: '' };
-          })
-          .catch(function () { return { lyric: '', tlyric: '' }; });
-      }
-      // joox 走 GD API
-      return gdApi('lyric', { id: cleanId, source: source }).then(function (data) {
-        return { lyric: data.lyric || data.lrc || '', tlyric: data.tlyric || '' };
-      });
-    }
     return api('lyric', { id: cleanId, source: source }).then(function (data) {
       return { lyric: data.lyric || data.lrc || '', tlyric: data.tlyric || '' };
     });
-  }
-
-  // 直接调用 GD 音乐台 API（用于扩展音源 joox/bilibili）
-  function gdApi(type, params) {
-    params = params || {};
-    var url = 'https://music-api.gdstudio.xyz/api.php?types=' + encodeURIComponent(type);
-    Object.keys(params).forEach(function (key) {
-      url += '&' + encodeURIComponent(key) + '=' + encodeURIComponent(params[key]);
-    });
-    return fetch(url, { headers: { 'Accept': 'application/json' } }).then(function (res) { return res.json(); });
   }
 
   // 获取网易云扫码登录二维码
@@ -772,16 +718,29 @@
   height: 14px;\
   fill: #fff;\
 }\
-.rmp-island-play-icon {\
-  width: 26px;\
-  height: 26px;\
+.rmp-island-play-btn {\
+  width: 28px;\
+  height: 28px;\
+  flex-shrink: 0;\
   display: flex;\
   align-items: center;\
   justify-content: center;\
-  flex-shrink: 0;\
-  opacity: 0.7;\
+  border-radius: 50%;\
+  background: rgba(255,255,255,0.22);\
+  cursor: pointer;\
+  opacity: 0.85;\
+  border: none;\
+  padding: 0;\
+  transition: opacity 0.2s ease, background 0.2s ease, transform 0.15s ease;\
 }\
-.rmp-island-play-icon svg {\
+.rmp-island-play-btn:hover {\
+  opacity: 1;\
+  background: rgba(194,12,12,0.4);\
+}\
+.rmp-island-play-btn:active {\
+  transform: scale(0.85);\
+}\
+.rmp-island-play-btn svg {\
   width: 15px;\
   height: 15px;\
   fill: #fff;\
@@ -2146,10 +2105,8 @@
       <div class="rmp-search-bar">\
         <input type="text" class="rmp-search-input" placeholder="输入歌曲名或歌手名..." />\
         <select class="rmp-select rmp-search-source">\
-          <option value="netease">网易云</option>\
           <option value="joox">JOOX</option>\
-          <option value="bilibili">B站</option>\
-          <option value="all">全平台</option>\
+          <option value="netease">网易云</option>\
         </select>\
         <button class="rmp-btn rmp-search-btn">搜索</button>\
       </div>\
@@ -2237,10 +2194,8 @@
         <div class="rmp-settings-group">\
           <label class="rmp-settings-label">默认音源</label>\
           <select class="rmp-select rmp-default-source-select" style="width:100%;">\
-            <option value="netease">网易云</option>\
             <option value="joox">JOOX</option>\
-            <option value="bilibili">B站</option>\
-            <option value="all">全平台</option>\
+            <option value="netease">网易云</option>\
           </select>\
         </div>\
         <div class="rmp-settings-group">\
@@ -2273,11 +2228,11 @@
             <span class="rmp-toggle-label">扩展音源（需自备代理，默认关闭）</span>\
             <div class="rmp-toggle rmp-extended-sources-toggle" role="switch"></div>\
           </div>\
-          <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:4px;line-height:1.5;">关闭时仅使用网易云；开启后可使用 JOOX、B站 等扩展音源（需自备访问外网的代理工具）</div>\
+          <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:4px;line-height:1.5;">关闭时仅使用 JOOX；开启后可切换为网易云（需登录并使用代理访问外网）</div>\
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.0.16 (search_all)</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.1.0 (joox)</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -2600,7 +2555,7 @@
       updateSearchSourceOptions();
       saveSettings();
       if (STATE.roche && STATE.roche.ui) {
-        STATE.roche.ui.toast(STATE.useExtendedSources ? '已开启扩展音源（JOOX、B站等），需要代理' : '已关闭扩展音源，仅使用网易云');
+        STATE.roche.ui.toast(STATE.useExtendedSources ? '已开启扩展音源（JOOX、网易云），需代理' : '已关闭扩展音源，仅使用 JOOX');
       }
     }
     refs.extendedSourcesToggle.addEventListener('click', onExtendedSourcesToggle);
@@ -2693,29 +2648,25 @@
     if (!searchSourceEl) return;
 
     if (STATE.useExtendedSources) {
-      // 开启扩展音源：显示全部选项
+      // 开启扩展音源：JOOX + 网易云（需开代理登录）
       var allOptions = [
-        { value: 'netease', label: '网易云' },
         { value: 'joox', label: 'JOOX' },
-        { value: 'bilibili', label: 'B站' },
-        { value: 'all', label: '全平台' }
+        { value: 'netease', label: '网易云' }
       ];
       setSelectOptions(searchSourceEl, allOptions);
       if (defaultSourceEl) setSelectOptions(defaultSourceEl, allOptions);
-      // 恢复之前保存的默认音源
       if (defaultSourceEl) defaultSourceEl.value = STATE.defaultSource;
       searchSourceEl.value = STATE.defaultSource;
     } else {
-      // 关闭扩展音源：仅显示网易云
-      var neteaseOnly = [
-        { value: 'netease', label: '网易云' }
+      // 关闭扩展音源：仅 JOOX
+      var jooxOnly = [
+        { value: 'joox', label: 'JOOX' }
       ];
-      setSelectOptions(searchSourceEl, neteaseOnly);
-      if (defaultSourceEl) setSelectOptions(defaultSourceEl, neteaseOnly);
-      // 强制切换到网易云
-      STATE.defaultSource = 'netease';
-      searchSourceEl.value = 'netease';
-      if (defaultSourceEl) defaultSourceEl.value = 'netease';
+      setSelectOptions(searchSourceEl, jooxOnly);
+      if (defaultSourceEl) setSelectOptions(defaultSourceEl, jooxOnly);
+      STATE.defaultSource = 'joox';
+      searchSourceEl.value = 'joox';
+      if (defaultSourceEl) defaultSourceEl.value = 'joox';
       saveSettings();
     }
   }
@@ -3325,8 +3276,8 @@
             return Promise.resolve({ success: false, message: '用户尚未同意免责声明，请在插件设置中同意后再点歌' });
           }
           var keyword = artist ? (songName + ' ' + artist) : songName;
-          // char 搜索受扩展音源开关限制：关闭时仅用网易云，开启时使用默认音源
-          var searchSource = STATE.useExtendedSources ? STATE.defaultSource : 'netease';
+          // char 搜索受扩展音源开关限制：关闭时仅用 JOOX，开启时使用默认音源
+          var searchSource = STATE.useExtendedSources ? STATE.defaultSource : 'joox';
           var limit = 10;
           // 带重试的搜索（CF Worker 不稳定，最多重试 5 次，间隔递增）
           function searchWithRetry(src, kw, lim, retries, delay) {
