@@ -3154,9 +3154,9 @@
         } catch (e) {}
       }
       // 加载免责声明同意状态
-      if (results[10] === '1') STATE.hasAgreedDisclaimer = true;
+      if (results[11] === '1') STATE.hasAgreedDisclaimer = true;
       // 加载扩展音源开关状态
-      if (results[11] === '1') STATE.useExtendedSources = true;
+      if (results[12] === '1') STATE.useExtendedSources = true;
     }).catch(function () {});
   }
 
@@ -3271,16 +3271,22 @@
             return Promise.resolve({ success: false, message: '用户尚未同意免责声明，请在插件设置中同意后再点歌' });
           }
           var keyword = artist ? (songName + ' ' + artist) : songName;
-          // 扩展音源关闭时：仅搜索网易云
+          // char 搜索受扩展音源开关限制：关闭时仅用网易云，开启时使用默认音源
           var searchSource = STATE.useExtendedSources ? STATE.defaultSource : 'netease';
-          return searchMusic(keyword, searchSource, 5).then(function (results) {
-            if (!results || results.length === 0) {
-              // 如果扩展音源开启且默认源没结果，尝试全平台
-              if (STATE.useExtendedSources) return searchMusic(keyword, 'all', 5);
-              else return [];
-            }
-            return results;
-          }).then(function (results) {
+          var limit = 10;
+          // 带重试的搜索（CF Worker 不稳定，最多重试 5 次，间隔递增）
+          function searchWithRetry(src, kw, lim, retries, delay) {
+            retries = retries || 0;
+            delay = delay || 800;
+            return searchMusic(kw, src, lim).then(function (results) {
+              if ((!results || results.length === 0) && retries < 5) {
+                return new Promise(function (resolve) { setTimeout(resolve, delay); })
+                  .then(function () { return searchWithRetry(src, kw, lim, retries + 1, delay + 400); });
+              }
+              return results || [];
+            });
+          }
+          return searchWithRetry(searchSource, keyword, limit).then(function (results) {
             if (!results || results.length === 0) {
               return { success: false, message: '未找到歌曲：' + songName };
             }
