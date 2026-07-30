@@ -1906,6 +1906,25 @@
   min-height: 36px;\
 }\
 .rmp-clear-btn:hover { background: rgba(255, 107, 107, 0.25); }\
+/* 免责声明（仅展示，无强制同意）*/\
+.rmp-disclaimer {\
+  margin-top: 10px;\
+  padding: 10px;\
+  border: 1px solid rgba(255,255,255,0.08);\
+  border-radius: 8px;\
+  background: rgba(255,255,255,0.02);\
+}\
+.rmp-disclaimer-title {\
+  font-size: 11px;\
+  font-weight: 600;\
+  color: rgba(255,255,255,0.35);\
+  margin-bottom: 4px;\
+}\
+.rmp-disclaimer-body {\
+  font-size: 10px;\
+  color: rgba(255,255,255,0.25);\
+  line-height: 1.6;\
+}\
 .rmp-topbar {\
   display: flex;\
   align-items: center;\
@@ -2189,6 +2208,14 @@
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
         <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.2.0</div>\
+        <div class="rmp-disclaimer">\
+          <div class="rmp-disclaimer-title">免责声明</div>\
+          <div class="rmp-disclaimer-body">\
+            本插件为音乐播放工具，本身不存储、不托管任何音乐内容。<br/>\
+            所有数据来自GD音乐台等第三方接口，版权归原始平台所有。<br/>\
+            仅供个人学习与技术研究，请勿商用。\
+          </div>\
+        </div>\
       </div>\
     </div>\
   </div>\
