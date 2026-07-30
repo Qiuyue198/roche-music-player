@@ -2840,13 +2840,19 @@
       var cookie = refs.cookieInput.value.trim();
       if (cookie) {
         STATE.cookie = cookie;
-        // 自动尝试获取用户信息
-        fetchUserInfo().then(function (profile) {
-          if (profile) {
-            STATE.userProfile = profile;
+        // 用 Vercel 后端验证 cookie（CF Worker 可能无此接口）
+        fetch('https://vercel.chajianreader.cc.cd/music?action=netease_user_info', {
+          headers: { 'Accept': 'application/json', 'X-Netease-Cookie': cookie }
+        }).then(function (r) { return r.json(); }).then(function (data) {
+          if (data && data.profile) {
+            STATE.userProfile = data.profile;
             updateLoginUI();
-            STATE.roche && STATE.roche.ui && STATE.roche.ui.toast('Cookie 有效！已登录：' + profile.nickname);
+            STATE.roche && STATE.roche.ui && STATE.roche.ui.toast('Cookie 有效！已登录：' + data.profile.nickname);
+          } else {
+            STATE.roche && STATE.roche.ui && STATE.roche.ui.toast('Cookie 已保存（验证未通过，请检查是否完整复制）');
           }
+        }).catch(function () {
+          STATE.roche && STATE.roche.ui && STATE.roche.ui.toast('Cookie 已保存（验证失败，请检查网络）');
         });
       }
       STATE.defaultSource = refs.defaultSourceSelect.value;
