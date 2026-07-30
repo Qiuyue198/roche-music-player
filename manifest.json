@@ -1,7 +1,7 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.4.0",
+  "version": "1.9.1",
   "description": "音乐播放器，全平台搜索+歌词过滤，网易云扫码登录",
   "author": "Roche",
   "entry": "https://raw.githubusercontent.com/yechen1844/roche-music-player/master/music-player.js",

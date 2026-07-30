@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.9.0';
+  var BUILD_TIME = '2026-07-30-v1.9.1';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -338,12 +338,30 @@
     return tryNext(0);
   }
 
-  // 获取专辑图（统一走 Vercel 后端）
+  // 获取专辑图
+  // 网易云源优先走官方API（GD音乐台返回的cover URL已全部404），其他源走GD pic
   function getPicUrl(picId, source) {
     if (!picId) return Promise.resolve('');
     var cleanId = String(picId).indexOf(':') >= 0 ? String(picId).split(':').pop() : String(picId);
+    if (source === 'netease') {
+      return getNeteaseCover(cleanId).then(function (url) {
+        return url || '';
+      });
+    }
     return api('pic', { id: cleanId, source: source }).then(function (data) {
       return data.url || '';
+    }).catch(function () { return ''; });
+  }
+
+  // 通过网易云官方API获取歌曲封面URL（绕过GD音乐台返回的过期URL）
+  function getNeteaseCover(songId) {
+    return fetch('https://music.163.com/api/song/detail?ids=%5B' + encodeURIComponent(songId) + '%5D', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+    }).then(function (res) { return res.json(); }).then(function (data) {
+      if (data && data.code === 200 && data.songs && data.songs[0] && data.songs[0].al) {
+        return data.songs[0].al.picUrl || '';
+      }
+      return '';
     }).catch(function () { return ''; });
   }
 
@@ -515,8 +533,10 @@
       });
       // 加载歌词（使用 lyricId）
       loadLyrics(song);
-      // 异步获取专辑封面（通过 pic_id 调用 GD 音乐台 pic 接口）
-      if (!song.cover && song.picId) {
+      // 异步获取专辑封面
+      // 网易云源始终刷新（GD音乐台返回的封面URL已全部404），其他源仅在缺失时获取
+      var needCoverRefresh = song.platform === 'netease' || (!song.cover && song.picId);
+      if (needCoverRefresh && song.picId) {
         getPicUrl(song.picId, song.platform || STATE.defaultSource).then(function (picUrl) {
           if (STATE.currentSong !== song) return;
           if (picUrl) {
@@ -2528,7 +2548,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.9.0</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.9.1</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3426,7 +3446,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.9.0',
+    version: '1.9.1',
 
     apps: [{
       id: 'roche-music-player-home',
