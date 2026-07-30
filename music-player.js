@@ -1965,7 +1965,7 @@
   background: rgba(194,12,12,0.12);\
   color: #E60026;\
 }\
-/* GD音乐台出处注明 + 免责声明 */\
+/* 免责声明 */\
 .rmp-disclaimer {\
   margin-top: 14px;\
   padding: 12px;\
@@ -2188,17 +2188,18 @@
             <span class="rmp-toggle-label">扩展音源（需自备代理，默认关闭）</span>\
             <div class="rmp-toggle rmp-extended-sources-toggle" role="switch"></div>\
           </div>\
-          <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:4px;line-height:1.5;">关闭时仅使用网易云；开启后可使用 JOOX、B站 等扩展音源（需自备访问外网的代理）</div>\
+          <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:4px;line-height:1.5;">关闭时仅使用网易云；开启后可使用 JOOX、B站 等扩展音源（需自备访问外网的代理工具）</div>\
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
-            1. 本插件为个人学习用途免费开源分享，不收取任何费用，也未与任何商业软件进行捆绑或合作。<br/>\
-            2. 音乐数据来自网络（<a href="https://music.gdstudio.xyz" target="_blank" rel="noopener">GD音乐台 music.gdstudio.xyz</a>），仅供个人学习参考，不得用于商业用途，如侵权请联系数据源方删除。<br/>\
-            3. 本插件可在任何支持 Roche 插件规范的环境运行，与 Roche 本体无关联、不依附其收费。使用者应确保自身使用行为符合所在地区的法律法规及所使用软件的用户协议。<br/>\
-            4. 继续使用将视为同意以上声明。\
+            1. 本插件是一个音乐播放工具平台，本身不提供、不存储、不托管任何音乐内容。<br/>\
+            2. 音乐搜索、播放、歌词等数据均来自第三方开放的音乐接口（如 <a href="https://music.gdstudio.xyz" target="_blank" rel="noopener">GD音乐台</a> 等），所有数据版权归原始平台所有。<br/>\
+            3. 本插件仅供个人学习与技术研究，不得用于任何商业用途。使用者应确保自身行为符合所在地法律法规及相关平台用户协议。<br/>\
+            4. 如认为插件中的音乐内容侵犯了您的权益，请联系对应的数据源平台处理。本插件开发者不承担因使用本插件产生的任何法律责任。<br/>\
+            5. 继续使用本插件将视为您已阅读并同意以上全部声明。\
           </div>\
           <div class="rmp-disclaimer-check-row">\
             <label class="rmp-disclaimer-check">\
@@ -2586,7 +2587,7 @@
       // 未同意：在搜索结果区显示锁定提示
       var searchResults = root.querySelector('.rmp-search-results');
       if (searchResults && !root.querySelector('.rmp-disclaimer-locked')) {
-        searchResults.innerHTML = '<div class="rmp-disclaimer-locked">请先在「设置」中阅读并同意免责声明后，方可搜索和播放音乐<br/>（数据来源：<a href="https://music.gdstudio.xyz" target="_blank" rel="noopener">GD音乐台</a>，仅限个人学习使用）</div>';
+        searchResults.innerHTML = '<div class="rmp-disclaimer-locked">请先在右上角「设置」中阅读并同意免责声明后使用<br/>（本插件为工具平台，不提供音乐内容）</div>';
       }
     }
   }
@@ -3088,7 +3089,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.0.10',
+    version: '1.0.12',
 
     apps: [{
       id: 'roche-music-player-home',
