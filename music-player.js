@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.8.0';
+  var BUILD_TIME = '2026-07-30-v1.9.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -1368,11 +1368,9 @@
     STATE.islandEl.classList.remove('rmp-island-minimized');
   }
 
-  // 显示灵动岛
+  // 显示灵动岛（播放时自动唤起）
   function showIsland() {
     if (STATE.islandEl) {
-      // 如果设置中关闭了灵动岛显示，则不显示
-      if (!STATE.islandVisible) return;
       STATE.islandEl.classList.remove('rmp-island-hidden');
       // 播放歌曲时自动从最小化恢复，并重置关闭状态
       unminimizeIsland();
@@ -1380,7 +1378,7 @@
     }
   }
 
-  // 隐藏灵动岛（关闭按钮触发，同时停止context注入）
+  // 隐藏灵动岛（关闭按钮触发，同时停止播放）
   function hideIsland() {
     if (STATE.islandEl) {
       STATE.islandEl.classList.add('rmp-island-hidden');
@@ -1389,6 +1387,18 @@
       STATE.islandClosed = true;
       hideIslandPlaylistPopup();
     }
+    // 停止播放并清空
+    if (STATE.audio) {
+      STATE.audio.pause();
+      STATE.audio.src = '';
+    }
+    STATE.isPlaying = false;
+    STATE.currentSong = null;
+    STATE.lyrics = [];
+    STATE.tlyrics = [];
+    STATE.currentLyricIndex = -1;
+    updatePlayStateUI();
+    updateSongInfoUI();
   }
 
   // 更新灵动岛封面旋转状态（playIcon 已移除）
@@ -2518,7 +2528,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.8.0</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.9.0</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3410,7 +3420,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.8.0',
+    version: '1.9.0',
 
     apps: [{
       id: 'roche-music-player-home',
