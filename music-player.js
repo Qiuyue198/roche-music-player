@@ -155,32 +155,26 @@
         platform: s.platform || s.source || source
       });
     }
-    // 扩展音源（joox/bilibili）走 GD API 直连
-    if (STATE.useExtendedSources && (source === 'joox' || source === 'bilibili')) {
-      return gdApi('search', { source: source, name: keywords, count: limit }).then(function (data) {
-        // GD API 返回格式可能是数组或 {value: [...], Count: N}
-        var songs = Array.isArray(data) ? data : (data.value || []);
-        return songs.map(normalizeSong);
-      });
-    }
-    if (source === 'all') {
-      return api('search_all', { keywords: keywords, limit: limit }).then(function (data) {
-        // 后端返回 { all: { netease, joox, bilibili }, merged: [...] }
-        if (data.merged && data.merged.length) return data.merged.map(normalizeSong);
-        var results = [];
-        var all = data.all || data;
+    // 统一走 search_all（单源搜索不稳定，全平台搜索始终正常），按扩展音源开关过滤
+    return api('search_all', { keywords: keywords, limit: limit }).then(function (data) {
+      var all = data.all || {};
+      var results = [];
+      if (STATE.useExtendedSources) {
+        // 扩展音源开启：按请求的 source 返回对应结果
+        if (source === 'all') {
+          if (data.merged && data.merged.length) return data.merged.map(normalizeSong);
+          ['netease', 'joox', 'bilibili'].forEach(function (p) {
+            if (all[p]) all[p].forEach(function (s) { results.push(normalizeSong(s)); });
+          });
+        } else {
+          if (all[source]) all[source].forEach(function (s) { results.push(normalizeSong(s)); });
+        }
+      } else {
+        // 扩展音源关闭：只取网易云结果
         if (all.netease) all.netease.forEach(function (s) { results.push(normalizeSong(s)); });
-        if (all.joox) all.joox.forEach(function (s) { results.push(normalizeSong(s)); });
-        if (all.bilibili) all.bilibili.forEach(function (s) { results.push(normalizeSong(s)); });
-        return results;
-      });
-    } else {
-      return api('search', { keywords: keywords, source: source, limit: limit }).then(function (data) {
-        // 后端返回 { songs: [...] }
-        var songs = data.songs || data.results || [];
-        return songs.map(normalizeSong);
-      });
-    }
+      }
+      return results;
+    });
   }
 
   // 获取播放 URL（br 由后端映射 standard/high/lossless -> 320/740/999）
