@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.3.1';
+  var BUILD_TIME = '2026-07-30-v1.3.2';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -2513,7 +2513,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.3.1</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.3.2</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3186,7 +3186,19 @@
               refs.loginStatus.className = 'rmp-login-status';
               break;
             case 802:
-              refs.loginStatus.textContent = '待确认，请在手机上点击确认登录';
+              // 显示 debug 信息帮助排查
+              var debugInfo = '';
+              if (result.weapi && result.weapi.code) debugInfo += ' [W:' + result.weapi.code + ']';
+              if (result.publicApi && result.publicApi.code) debugInfo += ' [P:' + result.publicApi.code + ']';
+              if (result.weapi && result.weapi.error) debugInfo += ' [W-err]';
+              if (result.publicApi && result.publicApi.error) debugInfo += ' [P-err]';
+              refs.loginStatus.textContent = '待确认，请在手机上点击确认登录' + debugInfo;
+              refs.loginStatus.className = 'rmp-login-status';
+              break;
+            default:
+              // 未知响应码，显示调试
+              refs.loginStatus.textContent = '状态: ' + (result.code || '?') + ' ' + (result.message || '');
+              if (result.weapi) refs.loginStatus.textContent += ' (W:' + JSON.stringify(result.weapi).substring(0, 60) + ')';
               refs.loginStatus.className = 'rmp-login-status';
               break;
             case 803:
@@ -3400,7 +3412,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.3.1',
+    version: '1.3.2',
 
     apps: [{
       id: 'roche-music-player-home',
