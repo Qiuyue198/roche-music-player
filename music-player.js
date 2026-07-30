@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.5.1';
+  var BUILD_TIME = '2026-07-30-v1.6.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -361,102 +361,43 @@
     });
   }
 
-  // 获取网易云扫码登录二维码（优先直连网易云API，国产IP不走Vercel代理）
-  // 按优先级尝试多个域名，避免 CORS 阻挡
-  var NETEASE_DIRECT_HOSTS = ['https://music.163.com', 'https://interface.music.163.com'];
+  // 获取网易云扫码登录二维码（纯直连，不走任何代理）
+  var NETEASE_HOST = 'https://music.163.com';
   function getQrLogin() {
-    function tryHost(idx) {
-      if (idx >= NETEASE_DIRECT_HOSTS.length) {
-        // 全部失败，降级 Vercel
-        return api('netease_qr_login', {});
-      }
-      var host = NETEASE_DIRECT_HOSTS[idx];
-      return fetch(host + '/api/login/qrcode/unikey?type=1', {
-        headers: { 'Accept': 'application/json' }
-      }).then(function (res) {
-        if (!res.ok) throw new Error('failed');
-        return res.json();
-      }).then(function (data) {
-        if (data && data.code === 200 && data.unikey) {
-          var qrurl = 'https://music.163.com/login?codekey=' + data.unikey;
-          return {
-            unikey: data.unikey,
-            qrimg: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(qrurl),
-            qrurl: qrurl,
-            _direct: true
-          };
-        }
-        throw new Error('bad_response');
-      }).catch(function () {
-        return tryHost(idx + 1);
-      });
-    }
-    return tryHost(0);
+    return fetch(NETEASE_HOST + '/api/login/qrcode/unikey?type=1', {
+      headers: { 'Accept': 'application/json' }
+    }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).then(function (data) {
+      if (!data || data.code !== 200 || !data.unikey) throw new Error('bad_response: ' + JSON.stringify(data));
+      var qrurl = 'https://music.163.com/login?codekey=' + data.unikey;
+      return {
+        unikey: data.unikey,
+        qrimg: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(qrurl),
+        qrurl: qrurl
+      };
+    });
   }
 
-  // 检查扫码状态（优先直连网易云API，GET方法避免CORS预检）
-  function checkQrLogin(key, cookie) {
-    function tryHost(idx) {
-      if (idx >= NETEASE_DIRECT_HOSTS.length) {
-        // 全部失败，降级 Vercel
-        var params = { key: key };
-        if (cookie) params.cookie = cookie;
-        return api('netease_qr_check', params);
-      }
-      var host = NETEASE_DIRECT_HOSTS[idx];
-      // GET 方式不触发 CORS 预检，更不容易被浏览器拦截
-      var url = host + '/api/login/qrcode/client/login?key=' + encodeURIComponent(key) + '&type=1';
-      return fetch(url, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' }
-      }).then(function (res) {
-        if (!res.ok) throw new Error('failed');
-        return res.json();
-      }).then(function (data) {
-        if (Array.isArray(data) && data.length > 0) data = data[0];
-        if (data && typeof data.code === 'number') {
-          return {
-            code: data.code,
-            cookie: data.cookie || '',
-            message: data.message || '',
-            _direct: true
-          };
-        }
-        throw new Error('bad_response');
-      }).catch(function () {
-        // GET 失败，尝试 POST
-        try {
-          var body = new URLSearchParams();
-          body.append('key', key);
-          body.append('type', '1');
-          return fetch(host + '/api/login/qrcode/client/login', {
-            method: 'POST',
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: body.toString(),
-          }).then(function (res) {
-            if (!res.ok) throw new Error('failed');
-            return res.json();
-          }).then(function (data) {
-            if (Array.isArray(data) && data.length > 0) data = data[0];
-            if (data && typeof data.code === 'number') {
-              return {
-                code: data.code,
-                cookie: data.cookie || '',
-                message: data.message || '',
-                _direct: true
-              };
-            }
-            throw new Error('bad_response');
-          });
-        } catch (e) {
-          return tryHost(idx + 1);
-        }
-      });
-    }
-    return tryHost(0);
+  // 检查扫码状态（纯直连，GET 方式避免 CORS 预检）
+  function checkQrLogin(key) {
+    var url = NETEASE_HOST + '/api/login/qrcode/client/login?key=' + encodeURIComponent(key) + '&type=1';
+    return fetch(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).then(function (data) {
+      if (Array.isArray(data)) data = data[0];
+      if (!data || typeof data.code !== 'number') throw new Error('bad_response');
+      return {
+        code: data.code,
+        cookie: data.cookie || '',
+        message: data.message || ''
+      };
+    });
   }
 
   // ==================== 音频引擎 ====================
@@ -2599,7 +2540,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.5.1</div>\
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">v1.6.0</div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3241,30 +3182,22 @@
     getQrLogin().then(function (data) {
       if (!data || !data.unikey) {
         refs.qrPlaceholder.textContent = '获取二维码失败';
-        refs.loginStatus.textContent = '获取二维码失败，请检查后端地址';
+        refs.loginStatus.textContent = '获取二维码失败，请检查网络';
         refs.loginStatus.className = 'rmp-login-status error';
         return;
       }
       var key = data.unikey;
-      // 直连模式不需要 session cookie
-      var isDirect = data._direct === true;
-      if (isDirect && data.qrimg) {
-        refs.qrImg.src = data.qrimg;
-        refs.qrImg.style.display = 'block';
-        refs.qrPlaceholder.style.display = 'none';
-      } else if (data.qrimg) {
+      if (data.qrimg) {
         refs.qrImg.src = data.qrimg;
         refs.qrImg.style.display = 'block';
         refs.qrPlaceholder.style.display = 'none';
       }
-      refs.loginStatus.textContent = '请使用网易云音乐 APP扫码' + (isDirect ? '' : ' (代理)');
+      refs.loginStatus.textContent = '请使用网易云音乐 APP扫码';
       refs.loginStatus.className = 'rmp-login-status';
 
-      // 开始轮询
       STATE.qrPollTimer = setInterval(function () {
-        checkQrLogin(key, '').then(function (result) {
+        checkQrLogin(key).then(function (result) {
           if (!result) return;
-          var isDirectResult = result._direct === true;
           switch (result.code) {
             case 800:
               refs.loginStatus.textContent = '二维码已过期，请重新获取';
@@ -3273,11 +3206,11 @@
               STATE.qrPollTimer = null;
               break;
             case 801:
-              refs.loginStatus.textContent = '等待扫码...' + (isDirectResult ? '' : ' (代理)');
+              refs.loginStatus.textContent = '等待扫码...';
               refs.loginStatus.className = 'rmp-login-status';
               break;
             case 802:
-              refs.loginStatus.textContent = '待确认，请在手机上点击确认登录' + (isDirectResult ? '' : ' (代理)');
+              refs.loginStatus.textContent = '待确认，请在手机上点击确认登录';
               refs.loginStatus.className = 'rmp-login-status';
               break;
             default:
@@ -3285,19 +3218,14 @@
               refs.loginStatus.className = 'rmp-login-status';
               break;
             case 803:
-              refs.loginStatus.textContent = '登录成功！' + (isDirectResult ? ' (直连)' : (result.method ? ' (' + result.method + ')' : ''));
+              refs.loginStatus.textContent = '登录成功！';
               refs.loginStatus.className = 'rmp-login-status success';
               if (result.cookie) {
                 STATE.cookie = result.cookie;
                 saveSettings();
               }
-              // 优先用 check 返回的 profile，否则再请求一次
-              if (result.profile) {
-                STATE.userProfile = result.profile;
-                saveSettings();
-                updateLoginUI();
-                if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功：' + result.profile.nickname);
-              } else if (result.cookie) {
+              // 直连无法获取 profile，用 Vercel 代理获取用户信息
+              if (result.cookie) {
                 fetchUserInfo().then(function (profile) {
                   updateLoginUI();
                   if (profile) {
@@ -3319,7 +3247,7 @@
       }, 2000);
     }).catch(function () {
       refs.qrPlaceholder.textContent = '获取二维码失败';
-      refs.loginStatus.textContent = '请求失败，请检查后端地址';
+      refs.loginStatus.textContent = '请求失败，请检查网络';
       refs.loginStatus.className = 'rmp-login-status error';
     });
   }
@@ -3489,7 +3417,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.5.1',
+    version: '1.6.0',
 
     apps: [{
       id: 'roche-music-player-home',
