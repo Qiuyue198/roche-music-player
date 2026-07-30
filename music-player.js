@@ -135,11 +135,23 @@
       var rawId = String(s.id || s.mediaId || '');
       // 去掉 "source:" 前缀（旧版Worker格式）
       var cleanId = rawId.indexOf(':') >= 0 ? rawId.split(':').pop() : rawId;
+      // GD API 返回的 artist 可能是数组（joox/bilibili 返回 ["歌手A","歌手B"]），转成字符串
+      var artist = Array.isArray(s.artist) ? s.artist.join(' / ') : (s.artist || s.singer || '');
+      // pic_id / lyric_id 可能缺 https: 前缀（bilibili 返回 //i0.hdslb.com/...）
+      function fixProtocol(val) {
+        if (!val) return val;
+        val = String(val);
+        if (val.indexOf('//') === 0) val = 'https:' + val;
+        return val;
+      }
+      var picId = fixProtocol(s.picId || s.pic_id || s.picId) || cleanId;
+      var lyricId = fixProtocol(s.lyricId || s.lyric_id || s.lyricId) || cleanId;
       return Object.assign({}, s, {
         id: cleanId,
-        // picId 优先用 pic_id/picId，兜底用 cleanId（GD 文档说 lyric_id 一般与 id 相同）
-        picId: s.picId || s.pic_id || s.picId || cleanId,
-        lyricId: s.lyricId || s.lyric_id || s.lyricId || cleanId,
+        artist: artist,
+        singer: artist,
+        picId: picId,
+        lyricId: lyricId,
         platform: s.platform || s.source || source
       });
     }
@@ -178,7 +190,14 @@
     var cleanId = String(id).indexOf(':') >= 0 ? String(id).split(':').pop() : String(id);
     // 扩展音源走 GD API 直连
     if (STATE.useExtendedSources && (source === 'joox' || source === 'bilibili')) {
-      return gdApi('url', { source: source, id: cleanId, br: STATE.quality === 'standard' ? '320' : (STATE.quality === 'high' ? '740' : '999') }).then(function (data) {
+      // bilibili 只支持 128/320，joox 走标准 br 映射
+      var extBr;
+      if (source === 'bilibili') {
+        extBr = STATE.quality === 'standard' ? '128' : '320';
+      } else {
+        extBr = STATE.quality === 'standard' ? '320' : (STATE.quality === 'high' ? '740' : '999');
+      }
+      return gdApi('url', { source: source, id: cleanId, br: extBr }).then(function (data) {
         return data.url || '';
       });
     }
