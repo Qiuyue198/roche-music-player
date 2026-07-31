@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.16.5';
+  var BUILD_TIME = '2026-07-31-v1.16.6';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -4304,10 +4304,13 @@
 
   window.RochePlugin = window.RochePlugin || {};
 
+  // 版本号从 BUILD_TIME 动态读取，防止历次升级漏改写死的旧版本号
+  var PLUGIN_VERSION = BUILD_TIME.indexOf('-v') >= 0 ? BUILD_TIME.split('-v')[1] : '1.16.6';
+
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.15.13',
+    version: PLUGIN_VERSION,
 
     apps: [{
       id: 'roche-music-player-home',
