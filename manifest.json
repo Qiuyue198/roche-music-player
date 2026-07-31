@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.15.3",
-  "description": "音乐播放器，使用版本号query参数绕过CDN缓存",
+  "version": "1.15.4",
+  "description": "音乐播放器，播放失败排查：audio事件日志",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.15.3/music-player.js?v=1.15.3",
+  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.15.4/music-player.js?v=1.15.4",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }

@@ -461,6 +461,7 @@
 
     // 播放事件
     function onPlay() {
+      console.log('[audio] play 事件触发', STATE.currentSong ? STATE.currentSong.name : '无');
       STATE.isPlaying = true;
       // 任何成功的播放都意味着音频已解锁
       STATE.audioUnlocked = true;
@@ -483,11 +484,13 @@
     }
     // 元数据加载事件
     function onLoadedMetadata() {
+      console.log('[audio] loadedmetadata 触发 duration=' + STATE.audio.duration);
       updateProgressUI();
     }
     // 错误事件
     var audioRetryCount = 0;
     function onError() {
+      console.error('[audio] error 事件触发', STATE.audio.error ? STATE.audio.error.code : '无错误码', STATE.audio.src);
       var song = STATE.currentSong;
       // 第一次错误，尝试降级到 standard 码率重试（仅非网易云登录音源）
       if (audioRetryCount === 0 && song && (!song.platform || song.platform !== 'netease' || !STATE.cookie)) {
@@ -584,12 +587,19 @@
         if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('无法获取播放链接，可能是版权限制');
         return;
       }
+      console.log('[playSong] 设置音频源并播放:', url);
       STATE.audio.src = url;
-      STATE.audio.play().catch(function (e) {
-        // 未解锁时已在前面提示过，不再重复显示错误
-        if (!STATE.audioUnlocked) return;
-        if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('播放失败: ' + (e.message || '未知错误'));
-      });
+      var playPromise = STATE.audio.play();
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise.then(function () {
+          console.log('[playSong] play() resolve 成功');
+        }).catch(function (e) {
+          console.error('[playSong] play() reject:', e && e.message ? e.message : e);
+          // 未解锁时已在前面提示过，不再重复显示错误
+          if (!STATE.audioUnlocked) return;
+          if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('播放失败: ' + (e.message || '未知错误'));
+        });
+      }
       // 加载歌词（使用 lyricId）
       loadLyrics(song);
       // 异步获取专辑封面
@@ -3919,7 +3929,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.15.3',
+    version: '1.15.4',
 
     apps: [{
       id: 'roche-music-player-home',
