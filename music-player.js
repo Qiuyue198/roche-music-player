@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.16.10';
+  var BUILD_TIME = '2026-07-31-v1.17.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -41,6 +41,9 @@
     cookie: '',               // 网易云 cookie
     backend: 'https://456.chajianreader.cc.cd', // 后端地址（CF Worker，网易云直连接口自动转发到Vercel）
     mcpBackend: 'https://ncm.chajianreader.cc.cd', // 网易云 MCP 服务器（HTTPS 直连腾讯云，扫码登录+开放平台API）
+    // 自部署网易云 API 地址（NeteaseCloudMusicApi 兼容实例，如 https://xxx.vercel.app）
+    // 填了之后网易云个人功能全部走使用者自己的实例，Cookie 不经过任何第三方服务器
+    neteaseApiBase: '',
     mcpToken: '',             // MCP 服务器 accessToken（扫码登录后获取）
     defaultSource: 'netease', // 默认音源
     quality: 'standard',      // 音质
@@ -167,9 +170,16 @@
     return fetch(url, { headers: headers }).then(function (res) { return res.json(); });
   }
 
-  // 网易云 API（通过 VPS 代理，避免 CORS）
+  // 网易云 API
+  // 优先走使用者自部署的 NeteaseCloudMusicApi 实例（STATE.neteaseApiBase，Cookie 只去使用者自己的服务器）
+  // 未配置时回退到默认后端（/proxy 转发）
   function neteaseApi(path, data, method) {
     method = method || 'GET';
+    var base = (STATE.neteaseApiBase || '').replace(/\/+$/, '');
+    if (base) {
+      return ncmApi(base, path, data, method);
+    }
+    // ===== 回退模式：默认后端 /proxy 转发 =====
     var fullUrl = 'https://music.163.com' + path;
     var proxyUrl = STATE.mcpBackend.replace(/\/+$/, '') + '/proxy?url=' + encodeURIComponent(fullUrl);
     var fetchOpts = {
@@ -206,6 +216,85 @@
     });
     return Promise.race([fetchPromise, timeoutPromise]).catch(function(e) {
       console.error('[neteaseApi 失败]', method, path, e.message || e);
+      throw e;
+    });
+  }
+
+  // 自部署 NeteaseCloudMusicApi 实例适配：
+  // 把 music.163.com 风格路径映射到 NCM 接口路径，参数转换（s→keywords 等），
+  // Cookie 通过 cookie 参数透传（浏览器禁止设置 Cookie 请求头，NCM 接受 cookie 参数）
+  function ncmApi(base, path, data, method) {
+    method = method || 'GET';
+    var map = {
+      '/api/search/get': '/search',
+      '/api/song/detail': '/song/detail',
+      '/api/song/lyric': '/lyric',
+      '/api/v3/discovery/recommend/songs': '/recommend/songs',
+      '/api/nuser/account/get': '/user/account',
+      '/api/user/playlist': '/user/playlist',
+      '/api/v6/playlist/detail': '/playlist/detail'
+    };
+    var qIdx = path.indexOf('?');
+    var bare = qIdx >= 0 ? path.substring(0, qIdx) : path;
+    var queryStr = qIdx >= 0 ? path.substring(qIdx + 1) : '';
+    var ncmPath = map[bare] || bare;
+    // 搜索接口参数 s → keywords
+    if (ncmPath === '/search') {
+      queryStr = queryStr.replace(/(^|&)s=/g, '$1keywords=');
+    }
+    // 每日推荐 NCM 为 GET 接口，去掉 csrf_token
+    if (ncmPath === '/recommend/songs') {
+      method = 'GET';
+      data = null;
+    }
+    // 过滤不兼容参数（lv/kv/tv 歌词用、csrf_token 推荐用）
+    queryStr = queryStr.split('&').filter(function (p) {
+      return p && !/^(lv|kv|tv|csrf_token)=/.test(p);
+    }).join('&');
+    // /song/detail 参数转换：插件前端发 ids=[a,b]（JSON数组），NCM 要求 ids=a,b（逗号分隔）
+    if (ncmPath === '/song/detail' && queryStr) {
+      queryStr = queryStr.split('&').map(function (p) {
+        var m = p.match(/^ids=(.*)$/);
+        if (!m) return p;
+        var v = decodeURIComponent(m[1]);
+        if (v.charAt(0) === '[' && v.charAt(v.length - 1) === ']') {
+          v = v.substring(1, v.length - 1);
+        }
+        return 'ids=' + v;
+      }).join('&');
+    }
+    var params = [];
+    if (queryStr) params.push(queryStr);
+    if (STATE.cookie && method === 'GET') params.push('cookie=' + encodeURIComponent(STATE.cookie));
+    var url = base + ncmPath + (params.length ? '?' + params.join('&') : '');
+    var fetchOpts = { method: method, headers: { 'Accept': 'application/json' } };
+    if (data && method === 'POST') {
+      var pairs = [];
+      if (typeof data === 'object') {
+        Object.keys(data).forEach(function (k) { pairs.push(encodeURIComponent(k) + '=' + encodeURIComponent(data[k])); });
+      } else {
+        pairs.push(String(data));
+      }
+      if (STATE.cookie) pairs.push('cookie=' + encodeURIComponent(STATE.cookie));
+      fetchOpts.body = pairs.join('&');
+      fetchOpts.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    }
+    console.log('[ncmApi]', method, url);
+    var fetchPromise = fetch(url, fetchOpts).then(function (r) {
+      return r.text().then(function (text) {
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          console.error('[ncmApi JSON解析失败]', text.substring(0, 400));
+          throw e;
+        }
+      });
+    });
+    var timeoutPromise = new Promise(function (resolve, reject) {
+      setTimeout(function () { reject(new Error('网易云API超时: ' + ncmPath)); }, 20000);
+    });
+    return Promise.race([fetchPromise, timeoutPromise]).catch(function (e) {
+      console.error('[ncmApi 失败]', method, path, e.message || e);
       throw e;
     });
   }
@@ -395,15 +484,38 @@
     var cleanId = String(id).indexOf(':') >= 0 ? String(id).split(':').pop() : String(id);
     var br = quality || STATE.quality;
     if (isPersonal && STATE.cookie && (source === 'netease')) {
-      // 播放 URL 缓存：10 分钟内同一首歌直接复用，避免重复请求 /play（VPS weapi 较慢）
+      // 播放 URL 缓存：10 分钟内同一首歌直接复用，避免重复请求
       var cacheKey = 'ne:' + cleanId;
       var cached = STATE.songUrlCache && STATE.songUrlCache[cacheKey];
       if (cached && cached.url && (Date.now() - cached.ts < 10 * 60 * 1000)) {
-        console.log('[getSongUrl 个人网易云-weapi] 命中缓存 songId=' + cleanId);
+        console.log('[getSongUrl 个人网易云] 命中缓存 songId=' + cleanId);
         return Promise.resolve(cached.url);
       }
-      // weapi 方案（NeteaseCloudMusicApi）：VPS /play 接口返回 weapi_url，
-      // weapi 生成的播放 URL 不绑定数据中心 IP（VPS 已验证可拉取 200）
+      // 自部署 NeteaseCloudMusicApi 实例：/song/url 直出 https 播放链接（无需中转，Cookie 只去使用者自己的实例）
+      var ncmBase = (STATE.neteaseApiBase || '').replace(/\/+$/, '');
+      if (ncmBase) {
+        // NCM /song/url 的 br 必须是数字码率（parseInt），字符串音质（standard/high/lossless）会变成 NaN 导致 404
+        var brMap = { standard: 128000, high: 320000, lossless: 999000, master: 999000, jy: 999000 };
+        var brNum = brMap[br] || parseInt(br, 10) || 999000;
+        var qs = 'id=' + encodeURIComponent(cleanId) + '&br=' + encodeURIComponent(brNum);
+        if (STATE.cookie) qs += '&cookie=' + encodeURIComponent(STATE.cookie);
+        var ncmUrl = ncmBase + '/song/url?' + qs;
+        console.log('[getSongUrl 个人网易云-ncm] songId=' + cleanId + ' url=' + ncmUrl);
+        return fetch(ncmUrl).then(function (r) { return r.json(); }).then(function (data) {
+          var u = (data && data.data && data.data[0] && data.data[0].url) || '';
+          if (!u) {
+            console.error('[getSongUrl 个人网易云-ncm] 未返回播放url', data);
+            return '';
+          }
+          if (u.indexOf('http://') === 0) u = u.replace('http://', 'https://');
+          STATE.songUrlCache[cacheKey] = { url: u, ts: Date.now() };
+          return u;
+        }).catch(function (e) {
+          console.error('[getSongUrl 个人网易云-ncm] 失败', e.message || e);
+          return '';
+        });
+      }
+      // 回退方案（weapi）：默认后端 /play 返回 weapi_url，经 /proxy 拉音频流
       var playUrl = STATE.mcpBackend.replace(/\/+$/, '') + '/play?id=' + encodeURIComponent(cleanId);
       console.log('[getSongUrl 个人网易云-weapi] songId=' + cleanId + ' playUrl=' + playUrl);
       return fetch(playUrl).then(function (r) { return r.json(); }).then(function (data) {
@@ -412,7 +524,6 @@
           console.error('[getSongUrl 个人网易云-weapi] 未返回weapi_url', data);
           return '';
         }
-        // 经 VPS 代理拉取音频流（VPS 已验证可拉 200），前端流式播放
         var url = STATE.mcpBackend.replace(/\/+$/, '') + '/proxy?url=' + encodeURIComponent(weapiUrl);
         console.log('[getSongUrl 个人网易云-weapi] weapi_url=' + weapiUrl + ' proxy=' + url);
         STATE.songUrlCache[cacheKey] = { url: url, ts: Date.now() };
@@ -3045,6 +3156,13 @@
           </div>\
         </div>\
         <div class="rmp-settings-group">\
+          <label class="rmp-settings-label">网易云 API 地址（自部署，强烈推荐）</label>\
+          <input type="text" class="rmp-settings-input rmp-nea-base-input" placeholder="https://你的实例.vercel.app（留空使用默认服务器）" />\
+          <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:4px;">\
+            一键部署 NeteaseCloudMusicApi 到自己的 Vercel 后填入地址，你的 Cookie 将只发往你自己的实例，任何第三方（含插件作者）都无法接触\
+          </div>\
+        </div>\
+        <div class="rmp-settings-group">\
           <label class="rmp-settings-label">char 点歌音源</label>\
           <select class="rmp-select rmp-char-source-select" style="width:100%;">\
             <option value="netease">网易云个人账号</option>\
@@ -3178,6 +3296,7 @@
       // 设置
       backendInput: root.querySelector('.rmp-backend-input'),
       cookieInput: root.querySelector('.rmp-cookie-input'),
+      neaBaseInput: root.querySelector('.rmp-nea-base-input'),
       defaultSourceSelect: root.querySelector('.rmp-default-source-select'),
       qualitySelect: root.querySelector('.rmp-quality-select'),
       islandTopInput: root.querySelector('.rmp-island-top-input'),
@@ -3479,6 +3598,9 @@
     function onSaveSettings() {
       var backend = refs.backendInput.value.trim();
       if (backend) { STATE.backend = backend.replace(/\/+$/, ''); }
+      // 自部署网易云 API 地址（留空 = 使用默认服务器）
+      var neaBase = refs.neaBaseInput.value.trim();
+      STATE.neteaseApiBase = neaBase ? neaBase.replace(/\/+$/, '') : '';
       STATE.defaultSource = refs.defaultSourceSelect.value;
       STATE.quality = refs.qualitySelect.value;
       var cookieVal = refs.cookieInput.value.trim();
@@ -3491,21 +3613,18 @@
         }
         // 先保存 cookie 再验证
         saveSettings();
-        // 验证 cookie 有效性
-        var headers = { 'X-Netease-Cookie': STATE.cookie };
-        fetch('https://music.163.com/api/nuser/account/get', { headers: { 'User-Agent': 'Mozilla/5.0', 'Cookie': STATE.cookie } })
-          .then(function (r) { return r.json(); })
-          .then(function (data) {
-            var profile = data.profile || {};
-            if (profile.userId) {
-              STATE.userProfile = { userId: profile.userId, nickname: profile.nickname, avatarUrl: profile.avatarUrl, vipType: profile.vipType };
-              STATE.roche.storage.set('rmp_user_profile', JSON.stringify(STATE.userProfile));
-              updateNeteaseLoginUI();
-              if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('Cookie 验证成功：' + profile.nickname);
-            } else {
-              if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('Cookie 可能已过期，部分功能不可用');
-            }
-          }).catch(function () {});
+        // 验证 cookie 有效性（走 neteaseApi：自部署实例时验证请求也直达使用者自己的实例）
+        neteaseApi('/api/nuser/account/get').then(function (data) {
+          var profile = data.profile || {};
+          if (profile.userId) {
+            STATE.userProfile = { userId: profile.userId, nickname: profile.nickname, avatarUrl: profile.avatarUrl, vipType: profile.vipType };
+            STATE.roche.storage.set('rmp_user_profile', JSON.stringify(STATE.userProfile));
+            updateNeteaseLoginUI();
+            if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('Cookie 验证成功：' + profile.nickname);
+          } else {
+            if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('Cookie 可能已过期，部分功能不可用');
+          }
+        }).catch(function () {});
       }
       saveSettings();
       if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('设置已保存');
@@ -4263,6 +4382,7 @@
       STATE.roche.storage.set('rmp_lyrics_full_inject', STATE.lyricsFullInject ? '1' : '0');
       STATE.roche.storage.set('rmp_agreed_disclaimer', '1');
       STATE.roche.storage.set('rmp_char_source', STATE.charSource);
+      STATE.roche.storage.set('rmp_netease_api_base', STATE.neteaseApiBase || '');
       if (STATE.cookie) STATE.roche.storage.set('rmp_cookie', STATE.cookie);
       if (STATE.mcpToken) STATE.roche.storage.set('rmp_mcp_token', STATE.mcpToken);
       if (STATE.userProfile) STATE.roche.storage.set('rmp_user_profile', JSON.stringify(STATE.userProfile));
@@ -4288,7 +4408,8 @@
       roche.storage.get('rmp_extended_sources'),
       roche.storage.get('rmp_lyrics_full_inject'),
       roche.storage.get('rmp_mcp_token'),
-      roche.storage.get('rmp_char_source')
+      roche.storage.get('rmp_char_source'),
+      roche.storage.get('rmp_netease_api_base')
     ]).then(function (results) {
       if (results[0]) STATE.backend = results[0];
       if (results[1]) STATE.defaultSource = results[1];
@@ -4325,6 +4446,8 @@
       if (results[14]) STATE.mcpToken = results[14];
       // char 点歌音源
       if (results[15] === 'netease' || results[15] === 'gd') STATE.charSource = results[15];
+      // 自部署网易云 API 地址
+      if (results[16]) STATE.neteaseApiBase = results[16].replace(/\/+$/, '');
     }).catch(function () {});
   }
 
@@ -4377,7 +4500,7 @@
   window.RochePlugin = window.RochePlugin || {};
 
   // 版本号从 BUILD_TIME 动态读取，防止历次升级漏改写死的旧版本号
-  var PLUGIN_VERSION = BUILD_TIME.indexOf('-v') >= 0 ? BUILD_TIME.split('-v')[1] : '1.16.6';
+  var PLUGIN_VERSION = BUILD_TIME.indexOf('-v') >= 0 ? BUILD_TIME.split('-v')[1] : '1.17.0';
 
   window.RochePlugin.register({
     id: 'roche-music-player',
