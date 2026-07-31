@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.15.12",
-  "description": "音乐播放器，打印外链HTML内容定位返回原因",
+  "version": "1.15.13",
+  "description": "音乐播放器，个人网易云播放URL改用VPS /play weapi接口",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.15.12/music-player.js?v=1.15.12",
+  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.15.13/music-player.js?v=1.15.13",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }

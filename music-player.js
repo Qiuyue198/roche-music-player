@@ -349,14 +349,24 @@
     var cleanId = String(id).indexOf(':') >= 0 ? String(id).split(':').pop() : String(id);
     var br = quality || STATE.quality;
     if (isPersonal && STATE.cookie && (source === 'netease')) {
-      // 网易云 playurl 接口返回的 CDN 流（m*.music.126.net）签名绑定获取方IP且对数据中心IP封禁，
-      // VPS代理生成→VPS拉取仍403。改用官方公开外链接口：
-      // music.163.com/song/media/outer/url?id=xxx.mp3 → 302 到公开分享音频（无防盗链、不绑定IP）
-      // 经 VPS 代理请求（music.163.com 域代理已验证可访问），代理跟随 302 返回音频流
-      var outerUrl = 'https://music.163.com/song/media/outer/url?id=' + encodeURIComponent(cleanId) + '.mp3';
-      var url = STATE.mcpBackend.replace(/\/+$/, '') + '/proxy?url=' + encodeURIComponent(outerUrl);
-      console.log('[getSongUrl 个人网易云-外链] songId=' + cleanId + ' url=' + url);
-      return Promise.resolve(url);
+      // weapi 方案（NeteaseCloudMusicApi）：VPS /play 接口返回 weapi_url，
+      // weapi 生成的播放 URL 不绑定数据中心 IP（VPS 已验证可拉取 200）
+      var playUrl = STATE.mcpBackend.replace(/\/+$/, '') + '/play?id=' + encodeURIComponent(cleanId);
+      console.log('[getSongUrl 个人网易云-weapi] songId=' + cleanId + ' playUrl=' + playUrl);
+      return fetch(playUrl).then(function (r) { return r.json(); }).then(function (data) {
+        var weapiUrl = data && data.weapi_url ? data.weapi_url : '';
+        if (!weapiUrl) {
+          console.error('[getSongUrl 个人网易云-weapi] 未返回weapi_url', data);
+          return '';
+        }
+        // 经 VPS 代理拉取音频流（VPS 已验证可拉 200），前端 fetch→blob 播放
+        var url = STATE.mcpBackend.replace(/\/+$/, '') + '/proxy?url=' + encodeURIComponent(weapiUrl);
+        console.log('[getSongUrl 个人网易云-weapi] weapi_url=' + weapiUrl + ' proxy=' + url);
+        return url;
+      }).catch(function (e) {
+        console.error('[getSongUrl 个人网易云-weapi] 失败', e.message || e);
+        return '';
+      });
     }
     return api('song_url', { id: cleanId, source: source, br: br }).then(function (data) {
       var url = data.url || '';
@@ -3993,7 +4003,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.15.12',
+    version: '1.15.13',
 
     apps: [{
       id: 'roche-music-player-home',
