@@ -2552,7 +2552,6 @@
 .rmp-qr-status-el { font-size: 13px; color: rgba(255,255,255,0.6); line-height: 1.6; }\
 .rmp-qr-status-el.success { color: #C20C0C; }\
 .rmp-qr-status-el.error { color: #E60026; }\
-';\
 ';
   }
 
