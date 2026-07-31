@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.15.5",
-  "description": "音乐播放器，音频加载失败自动fetch→blob备用播放",
+  "version": "1.15.6",
+  "description": "音乐播放器，个人网易云音频走VPS代理转发绕过CDN 403",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.15.5/music-player.js?v=1.15.5",
+  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.15.6/music-player.js?v=1.15.6",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }

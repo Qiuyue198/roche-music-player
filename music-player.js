@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.15.5';
+  var BUILD_TIME = '2026-07-31-v1.15.6';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -350,8 +350,11 @@
       ).then(function(resp) {
         var d = (resp.data || [])[0] || {};
         var url = d.url || '';
-        // 网易云返回的播放URL可能是http，在HTTPS环境下会被混合内容策略拦截，强制升级为https
-        if (url && url.indexOf('http://') === 0) url = url.replace('http://', 'https://');
+        // 网易云CDN对https直连返回403，且签名绑定VPS出口IP。
+        // 音频URL必须走VPS代理转发（服务端用http拉取，返回流给前端播放）
+        if (url && url.indexOf('http') === 0) {
+          url = STATE.mcpBackend.replace(/\/+$/, '') + '/proxy?url=' + encodeURIComponent(url);
+        }
         console.log('[getSongUrl 个人网易云] songId=' + cleanId + ' code=' + resp.code + ' url=' + (url || '(空)') + ' br=' + d.br, d);
         return url;
       });
