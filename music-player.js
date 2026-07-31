@@ -130,8 +130,6 @@
   function neteaseApi(url, data, method) {
     method = method || 'GET';
     var headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Referer': 'https://music.163.com/',
       'Cookie': STATE.cookie
     };
     var body = null;
