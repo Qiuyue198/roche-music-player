@@ -404,15 +404,14 @@
   }
 
   // 获取网易云扫码登录二维码（通过 CF Worker 后端，避免 CORS）
-  // MCP 服务器 API 调用（通过 CF Worker /music 端点透传到腾讯云）
+  // MCP 服务器 API 调用（通过 CF Worker /music/ncm 路径透传到腾讯云）
   function mcpApi(endpoint, params) {
     params = params || {};
-    // login/start → ncm_login_start, user/playlists → ncm_user_playlists
-     var actionName = 'ncm_' + endpoint.replace(/\//g, '_');
-    var url = STATE.backend.replace(/\/+$/, '') + '/music?action=' + encodeURIComponent(actionName);
-    Object.keys(params).forEach(function(k) {
-      url += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
-    });
+    var url = STATE.backend.replace(/\/+$/, '') + '/music/ncm/' + endpoint;
+    var qs = Object.keys(params).map(function(k) {
+      return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+    }).join('&');
+    if (qs) url += '?' + qs;
     return fetch(url).then(function(r) { return r.json(); });
   }
 
