@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.16.3",
-  "description": "音乐播放器：APK调试日志面板，移动端顶栏布局修复",
+  "version": "1.16.4",
+  "description": "音乐播放器：修复requireNeDisclaimer残留引用导致搜索/推荐/char点歌报错中断",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.16.3/music-player.js?v=1.16.3",
+  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.16.4/music-player.js?v=1.16.4",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }

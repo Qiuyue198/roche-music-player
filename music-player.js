@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.16.3';
+  var BUILD_TIME = '2026-07-31-v1.16.4';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -3198,7 +3198,6 @@
         if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('请输入搜索关键词');
         return;
       }
-      if (!requireNeDisclaimer()) return;
       if (!STATE.cookie) {
         if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('请先在设置中填写网易云 Cookie');
         return;
@@ -3844,7 +3843,6 @@
   function loadDailyRecommend() {
     var refs = STATE.appRefs;
     if (!refs.neRecsList) return;
-    if (!requireNeDisclaimer()) return;
     if (!STATE.cookie) {
       refs.neRecsList.innerHTML = '<div class="rmp-empty-state">请先在设置中填写网易云 Cookie</div>';
       return;
@@ -4159,7 +4157,6 @@
     if (refs.islandVisibleToggle) refs.islandVisibleToggle.classList.toggle('on', !!STATE.islandVisible);
     if (refs.lyricsFullToggle) refs.lyricsFullToggle.classList.toggle('on', !!STATE.lyricsFullInject);
     if (refs.charSourceSelect) refs.charSourceSelect.value = STATE.charSource;
-    if (refs.neAgreeCheck) refs.neAgreeCheck.checked = !!STATE.agreedNeDisclaimer;
   }
 
   // 保存设置到 roche.storage（顺序调用，避免并发导致持久化失败）
@@ -4369,9 +4366,6 @@
           if (STATE.charSource === 'netease') {
             if (!STATE.cookie) {
               return Promise.resolve({ success: false, message: '请先在设置中填写网易云 Cookie，或切换到第三方音乐源' });
-            }
-            if (!STATE.agreedNeDisclaimer) {
-              return Promise.resolve({ success: false, message: '请先在设置中同意网易云免责声明' });
             }
             // 用用户自己的网易云账号搜索（走 VPS 代理）
             // 网易云搜索加超时（12 秒），避免 VPS 慢导致 char 长时间等待
