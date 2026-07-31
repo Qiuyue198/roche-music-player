@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.16.2",
-  "description": "音乐播放器：修复网易云封面http混合内容拦截，neteaseApi加20s超时",
+  "version": "1.16.3",
+  "description": "音乐播放器：APK调试日志面板，移动端顶栏布局修复",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.16.2/music-player.js?v=1.16.2",
+  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.16.3/music-player.js?v=1.16.3",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }

@@ -1,8 +1,31 @@
 (function () {
   'use strict';
 
+  // ==================== 调试日志收集（APK/移动端排查用） ====================
+  var debugLogs = [];
+  function pushDebug(level, args) {
+    var parts = Array.prototype.map.call(args || [], function (a) {
+      if (typeof a === 'string') return a;
+      try { return JSON.stringify(a); } catch (e) { return String(a); }
+    });
+    var line = '[' + new Date().toLocaleTimeString() + '][' + level + '] ' + parts.join(' ');
+    debugLogs.push(line);
+    if (debugLogs.length > 500) debugLogs.shift();
+  }
+  try {
+    var _origLog = window.console.log.bind(window.console);
+    var _origWarn = window.console.warn.bind(window.console);
+    var _origErr = window.console.error.bind(window.console);
+    window.console.log = function () { pushDebug('LOG', arguments); _origLog.apply(null, arguments); };
+    window.console.warn = function () { pushDebug('WARN', arguments); _origWarn.apply(null, arguments); };
+    window.console.error = function () { pushDebug('ERR', arguments); _origErr.apply(null, arguments); };
+    window.addEventListener('error', function (e) {
+      pushDebug('WINERR', [e.message + ' @ ' + (e.filename || '') + ':' + (e.lineno || 0)]);
+    });
+  } catch (e) {}
+
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.16.2';
+  var BUILD_TIME = '2026-07-31-v1.16.3';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -2470,6 +2493,58 @@
   padding: calc(env(safe-area-inset-top) + var(--rmp-island-top, 8px) + 52px + 16px) 8px 8px;\
   flex-shrink: 0;\
 }\
+/* APK/移动端：没有灵动岛，顶栏恢复正常位置（否则会被灵动岛预留空间推到中间） */\
+.rmp-mobile .rmp-topbar {\
+  padding-top: calc(env(safe-area-inset-top) + 8px);\
+}\
+/* 调试日志区块 */\
+.rmp-debug-block {\
+  margin-top: 10px;\
+  padding: 10px;\
+  border: 1px solid rgba(255,255,255,0.08);\
+  border-radius: 8px;\
+  background: rgba(0,0,0,0.25);\
+}\
+.rmp-debug-header {\
+  display: flex;\
+  align-items: center;\
+  justify-content: space-between;\
+  margin-bottom: 6px;\
+}\
+.rmp-debug-title {\
+  font-size: 11px;\
+  font-weight: 600;\
+  color: rgba(255,255,255,0.4);\
+}\
+.rmp-debug-logs {\
+  max-height: 180px;\
+  overflow-y: auto;\
+  background: rgba(0,0,0,0.35);\
+  border-radius: 6px;\
+  padding: 6px;\
+  font-family: Consolas, Menlo, monospace;\
+  font-size: 10px;\
+  line-height: 1.5;\
+}\
+.rmp-debug-line {\
+  color: rgba(255,255,255,0.55);\
+  white-space: pre-wrap;\
+  word-break: break-all;\
+}\
+.rmp-debug-line.err {\
+  color: #ff6b6b;\
+}\
+.rmp-debug-empty {\
+  color: rgba(255,255,255,0.3);\
+  font-size: 11px;\
+  text-align: center;\
+  padding: 12px 0;\
+}\
+.rmp-debug-actions {\
+  display: flex;\
+  gap: 8px;\
+  margin-top: 8px;\
+}\
 .rmp-topbar .rmp-tabs {\
   flex: 1;\
   padding: 0;\
@@ -2931,6 +3006,17 @@
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
         <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">' + BUILD_TIME + '</div>\
+        <div class="rmp-debug-block">\
+          <div class="rmp-debug-header">\
+            <span class="rmp-debug-title">调试日志</span>\
+            <button class="rmp-btn rmp-btn-secondary rmp-debug-refresh-btn" style="min-height:30px;padding:4px 12px;font-size:12px;">刷新</button>\
+          </div>\
+          <div class="rmp-debug-logs"></div>\
+          <div class="rmp-debug-actions">\
+            <button class="rmp-btn rmp-btn-secondary rmp-debug-copy-btn" style="min-height:30px;padding:4px 12px;font-size:12px;">复制日志</button>\
+            <button class="rmp-btn rmp-btn-secondary rmp-debug-clear-btn" style="min-height:30px;padding:4px 12px;font-size:12px;">清空</button>\
+          </div>\
+        </div>\
         <div class="rmp-ne-disclaimer">\
           <div class="rmp-disclaimer-title">网易云免责声明</div>\
           <div class="rmp-disclaimer-body">\
@@ -3016,8 +3102,18 @@
       lyricsFullToggle: root.querySelector('.rmp-lyrics-full-toggle'),
       closeBtn: root.querySelector('.rmp-close-btn'),
       // 设置 — char 点歌音源
-      charSourceSelect: root.querySelector('.rmp-char-source-select')
+      charSourceSelect: root.querySelector('.rmp-char-source-select'),
+      // 设置 — 调试日志
+      debugLogsEl: root.querySelector('.rmp-debug-logs'),
+      debugRefreshBtn: root.querySelector('.rmp-debug-refresh-btn'),
+      debugCopyBtn: root.querySelector('.rmp-debug-copy-btn'),
+      debugClearBtn: root.querySelector('.rmp-debug-clear-btn')
     };
+
+    // APK/移动端适配：无灵动岛，顶栏恢复正常位置
+    if (/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '')) {
+      root.classList.add('rmp-mobile');
+    }
 
     // 初始化设置值
     STATE.appRefs.backendInput.value = STATE.backend;
@@ -3387,6 +3483,42 @@
       STATE.appCleanups.push(function () { refs.charSourceSelect.removeEventListener('change', onCharSourceChange); });
     }
 
+    // ===== 调试日志 =====
+    if (refs.debugRefreshBtn) {
+      refs.debugRefreshBtn.addEventListener('click', renderDebugLogs);
+      STATE.appCleanups.push(function () { refs.debugRefreshBtn.removeEventListener('click', renderDebugLogs); });
+    }
+    if (refs.debugCopyBtn) {
+      function onDebugCopy() {
+        var text = debugLogs.join('\n');
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () {
+            if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('日志已复制');
+          }).catch(function () {
+            if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('复制失败');
+          });
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('日志已复制'); } catch (e) {}
+          document.body.removeChild(ta);
+        }
+      }
+      refs.debugCopyBtn.addEventListener('click', onDebugCopy);
+      STATE.appCleanups.push(function () { refs.debugCopyBtn.removeEventListener('click', onDebugCopy); });
+    }
+    if (refs.debugClearBtn) {
+      function onDebugClear() {
+        debugLogs.length = 0;
+        renderDebugLogs();
+      }
+      refs.debugClearBtn.addEventListener('click', onDebugClear);
+      STATE.appCleanups.push(function () { refs.debugClearBtn.removeEventListener('click', onDebugClear); });
+    }
+    renderDebugLogs();
+
     // ===== 网易云免责声明（纯展示，无勾选交互） =====
   }
 
@@ -3399,6 +3531,22 @@
     STATE.appRefs.panels.forEach(function (panel) {
       panel.classList.toggle('active', panel.getAttribute('data-panel') === tabName);
     });
+  }
+
+  // 渲染调试日志（设置页，最新 50 条倒序）
+  function renderDebugLogs() {
+    var refs = STATE.appRefs;
+    if (!refs.debugLogsEl) return;
+    if (!debugLogs || debugLogs.length === 0) {
+      refs.debugLogsEl.innerHTML = '<div class="rmp-debug-empty">暂无日志，先操作插件（搜索/播放/登录）再点刷新</div>';
+      return;
+    }
+    var last = debugLogs.slice(-50).reverse();
+    refs.debugLogsEl.innerHTML = last.map(function (l) {
+      var cls = (l.indexOf('[ERR]') >= 0 || l.indexOf('[WINERR]') >= 0) ? ' err' : '';
+      return '<div class="rmp-debug-line' + cls + '">' + escapeHtml(l) + '</div>';
+    }).join('');
+    refs.debugLogsEl.scrollTop = 0;
   }
 
   // 渲染搜索结果
