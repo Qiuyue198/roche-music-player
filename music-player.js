@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.16.7';
+  var BUILD_TIME = '2026-07-31-v1.16.8';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -4471,12 +4471,12 @@
             });
           }
           // 模式 B：第三方音乐源（GD，netease → joox 降级重试）
-          // 带重试的搜索（快速重试 2 次，避免 char 等待过久；全部失败后降级 joox）
+          // 带重试的搜索（快速重试 4 次，全部失败后降级 joox）
           function searchWithRetry(src, kw, lim, retries, delay) {
             retries = retries || 0;
             delay = delay || 300;
             return searchMusic(kw, src, lim).then(function (results) {
-              if ((!results || results.length === 0) && retries < 2) {
+              if ((!results || results.length === 0) && retries < 4) {
                 return new Promise(function (resolve) { setTimeout(resolve, delay); })
                   .then(function () { return searchWithRetry(src, kw, lim, retries + 1, delay + 200); });
               }
