@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.15.6';
+  var BUILD_TIME = '2026-07-31-v1.15.7';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -528,42 +528,6 @@
       updatePlayStateUI();
     }
 
-    // fetch 音频为 blob 后播放（诊断+备用方案）
-    function fetchBlobAndPlay(src) {
-      if (!src) return;
-      console.log('[audio] 尝试 fetch→blob 播放:', src);
-      fetch(src).then(function (r) {
-        console.log('[audio] fetch 状态:', r.status, 'content-type:', r.headers.get('content-type'), 'content-length:', r.headers.get('content-length'));
-        if (!r.ok) {
-          console.error('[audio] fetch 非2xx:', r.status);
-          if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('音频源返回 ' + r.status + '，无法播放');
-          return;
-        }
-        return r.blob().then(function (blob) {
-          console.log('[audio] blob 大小:', blob.size, 'type:', blob.type);
-          if (!blob.size) {
-            if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('音频为空，链接可能已过期');
-            return;
-          }
-          var objUrl = URL.createObjectURL(blob);
-          STATE.audio.src = objUrl;
-          var p = STATE.audio.play();
-          if (p && typeof p.then === 'function') {
-            p.then(function () {
-              console.log('[audio] blob 播放成功');
-              if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('已通过备用方式播放');
-            }).catch(function (e) {
-              console.error('[audio] blob 播放失败:', e.message || e);
-              if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('播放失败: ' + (e.message || '未知'));
-            });
-          }
-        });
-      }).catch(function (e) {
-        console.error('[audio] fetch 失败:', e.message || e);
-        if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('音频获取失败');
-      });
-    }
-
     STATE.audio.addEventListener('play', onPlay);
     STATE.audio.addEventListener('pause', onPause);
     STATE.audio.addEventListener('timeupdate', onTimeUpdate);
@@ -601,6 +565,48 @@
     });
   }
 
+  // fetch 音频为 blob 后播放（带 Cookie 头，供个人网易云经代理拉取音频）
+  // 说明：audio 元素无法设置自定义请求头，个人网易云播放必须走此路径，
+  // 让代理带上 X-Netease-Cookie 转发给网易云 CDN 验证 VIP 权限
+  function fetchBlobAndPlay(src, showToast) {
+    if (!src) return;
+    console.log('[audio] 尝试 fetch→blob 播放:', src);
+    var fetchOpts = {};
+    if (STATE.cookie) {
+      fetchOpts.headers = { 'X-Netease-Cookie': STATE.cookie };
+    }
+    fetch(src, fetchOpts).then(function (r) {
+      console.log('[audio] fetch 状态:', r.status, 'content-type:', r.headers.get('content-type'), 'content-length:', r.headers.get('content-length'));
+      if (!r.ok) {
+        console.error('[audio] fetch 非2xx:', r.status);
+        if (showToast && STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('音频源返回 ' + r.status + '，无法播放');
+        return;
+      }
+      return r.blob().then(function (blob) {
+        console.log('[audio] blob 大小:', blob.size, 'type:', blob.type);
+        if (!blob.size) {
+          if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('音频为空，链接可能已过期');
+          return;
+        }
+        var objUrl = URL.createObjectURL(blob);
+        STATE.audio.src = objUrl;
+        var p = STATE.audio.play();
+        if (p && typeof p.then === 'function') {
+          p.then(function () {
+            console.log('[audio] blob 播放成功');
+            if (showToast && STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('已通过备用方式播放');
+          }).catch(function (e) {
+            console.error('[audio] blob 播放失败:', e.message || e);
+            if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('播放失败: ' + (e.message || '未知'));
+          });
+        }
+      });
+    }).catch(function (e) {
+      console.error('[audio] fetch 失败:', e.message || e);
+      if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('音频获取失败');
+    });
+  }
+
   // 播放指定歌曲
   function playSong(song, index) {
     if (!song) return;
@@ -634,17 +640,22 @@
         return;
       }
       console.log('[playSong] 设置音频源并播放:', url);
-      STATE.audio.src = url;
-      var playPromise = STATE.audio.play();
-      if (playPromise && typeof playPromise.then === 'function') {
-        playPromise.then(function () {
-          console.log('[playSong] play() resolve 成功');
-        }).catch(function (e) {
-          console.error('[playSong] play() reject:', e && e.message ? e.message : e);
-          // 未解锁时已在前面提示过，不再重复显示错误
-          if (!STATE.audioUnlocked) return;
-          if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('播放失败: ' + (e.message || '未知错误'));
-        });
+      if (song._personal && STATE.cookie) {
+        // 个人网易云：audio 元素无法带 Cookie 头，必须经代理 fetch→blob 播放
+        fetchBlobAndPlay(url, true);
+      } else {
+        STATE.audio.src = url;
+        var playPromise = STATE.audio.play();
+        if (playPromise && typeof playPromise.then === 'function') {
+          playPromise.then(function () {
+            console.log('[playSong] play() resolve 成功');
+          }).catch(function (e) {
+            console.error('[playSong] play() reject:', e && e.message ? e.message : e);
+            // 未解锁时已在前面提示过，不再重复显示错误
+            if (!STATE.audioUnlocked) return;
+            if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('播放失败: ' + (e.message || '未知错误'));
+          });
+        }
       }
       // 加载歌词（使用 lyricId）
       loadLyrics(song);
@@ -3975,7 +3986,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.15.5',
+    version: '1.15.7',
 
     apps: [{
       id: 'roche-music-player-home',
