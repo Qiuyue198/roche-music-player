@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.15.7';
+  var BUILD_TIME = '2026-07-31-v1.15.9';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -147,9 +147,16 @@
     }
     console.log('[neteaseApi]', method, proxyUrl, fetchOpts.body || '');
     return fetch(proxyUrl, fetchOpts).then(function(r) {
-      return r.json().then(function(json) {
-        console.log('[neteaseApi 响应]', method, path, 'HTTP', r.status, json);
-        return json;
+      return r.text().then(function(text) {
+        console.log('[neteaseApi 响应原文]', method, path, 'HTTP', r.status, '长度=' + text.length, text.substring(0, 600));
+        try {
+          var json = JSON.parse(text);
+          console.log('[neteaseApi 响应]', method, path, json);
+          return json;
+        } catch (e) {
+          console.error('[neteaseApi JSON解析失败]', text.substring(0, 600));
+          throw e;
+        }
       });
     }).catch(function(e) {
       console.error('[neteaseApi 失败]', method, path, e.message || e);
@@ -3988,7 +3995,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.15.8',
+    version: '1.15.9',
 
     apps: [{
       id: 'roche-music-player-home',

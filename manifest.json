@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.15.8",
-  "description": "音乐播放器，去掉encodeType=aac改请求普通流避开加密流403",
+  "version": "1.15.9",
+  "description": "音乐播放器，neteaseApi打印原始响应定位JSON解析失败",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.15.8/music-player.js?v=1.15.8",
+  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.15.9/music-player.js?v=1.15.9",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
