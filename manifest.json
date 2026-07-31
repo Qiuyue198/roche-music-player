@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.15.7",
-  "description": "音乐播放器，个人网易云音频经代理fetch→blob播放并携带Cookie",
+  "version": "1.15.8",
+  "description": "音乐播放器，去掉encodeType=aac改请求普通流避开加密流403",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.15.7/music-player.js?v=1.15.7",
+  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.15.8/music-player.js?v=1.15.8",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }

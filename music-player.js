@@ -345,8 +345,10 @@
       var csrf = getNeCsrf();
       var brMap = { 'standard': 'standard', 'high': 'higher', 'lossless': 'lossless' };
       var level = brMap[br] || 'standard';
+      // 不带 encodeType：请求普通可播放流。
+      // 带 encodeType=aac 会返回 jdyyaac 加密流，CDN 对其权限校验最严（数据中心IP/非官方客户端一律403）
       return neteaseApi('/api/song/enhance/player/url/v1?csrf_token=' + encodeURIComponent(csrf),
-        { ids: '[' + cleanId + ']', level: level, encodeType: 'aac' }, 'POST'
+        { ids: '[' + cleanId + ']', level: level }, 'POST'
       ).then(function(resp) {
         var d = (resp.data || [])[0] || {};
         var url = d.url || '';
@@ -3986,7 +3988,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.15.7',
+    version: '1.15.8',
 
     apps: [{
       id: 'roche-music-player-home',
