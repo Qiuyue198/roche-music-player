@@ -145,7 +145,16 @@
       }
       fetchOpts.headers['Content-Type'] = 'application/x-www-form-urlencoded';
     }
-    return fetch(proxyUrl, fetchOpts).then(function(r) { return r.json(); });
+    console.log('[neteaseApi]', method, proxyUrl, fetchOpts.body || '');
+    return fetch(proxyUrl, fetchOpts).then(function(r) {
+      return r.json().then(function(json) {
+        console.log('[neteaseApi 响应]', method, path, 'HTTP', r.status, json);
+        return json;
+      });
+    }).catch(function(e) {
+      console.error('[neteaseApi 失败]', method, path, e.message || e);
+      throw e;
+    });
   }
   
   // 从 Cookie 提取 __csrf
@@ -340,6 +349,7 @@
         { ids: '[' + cleanId + ']', level: level, encodeType: 'aac' }, 'POST'
       ).then(function(resp) {
         var d = (resp.data || [])[0] || {};
+        console.log('[getSongUrl 个人网易云] songId=' + cleanId + ' code=' + resp.code + ' url=' + (d.url || '(空)') + ' br=' + d.br, d);
         return d.url || '';
       });
     }
