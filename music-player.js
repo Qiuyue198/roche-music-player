@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.16.1';
+  var BUILD_TIME = '2026-07-31-v1.16.2';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -108,6 +108,14 @@
       .replace(/'/g, '&#039;');
   }
 
+  // http → https 升级（封面等资源在 HTTPS 页面必须为 https，否则混合内容被拦截）
+  function toHttps(url) {
+    if (!url) return url;
+    url = String(url);
+    if (url.indexOf('http://') === 0) url = 'https://' + url.substring(7);
+    return url;
+  }
+
   // 获取翻译歌词文本（按时间匹配）
   function getTranslatedText(time) {
     if (!STATE.tlyrics || STATE.tlyrics.length === 0) return '';
@@ -150,7 +158,7 @@
       fetchOpts.headers['Content-Type'] = 'application/x-www-form-urlencoded';
     }
     console.log('[neteaseApi]', method, proxyUrl, fetchOpts.body || '');
-    return fetch(proxyUrl, fetchOpts).then(function(r) {
+    var fetchPromise = fetch(proxyUrl, fetchOpts).then(function(r) {
       return r.text().then(function(text) {
         console.log('[neteaseApi 响应原文]', method, path, 'HTTP', r.status, '长度=' + text.length, text.substring(0, 600));
         try {
@@ -162,7 +170,12 @@
           throw e;
         }
       });
-    }).catch(function(e) {
+    });
+    // 加 20 秒超时：避免 VPS/网络慢导致请求无限挂起、界面"毫无反应"
+    var timeoutPromise = new Promise(function (resolve, reject) {
+      setTimeout(function () { reject(new Error('neteaseApi 请求超时: ' + path)); }, 20000);
+    });
+    return Promise.race([fetchPromise, timeoutPromise]).catch(function(e) {
       console.error('[neteaseApi 失败]', method, path, e.message || e);
       throw e;
     });
@@ -430,7 +443,8 @@
   function getNeteaseCover(songId) {
     return neteaseApi('/api/song/detail?ids=%5B' + encodeURIComponent(songId) + '%5D').then(function (data) {
       if (data && data.code === 200 && data.songs && data.songs[0] && data.songs[0].al) {
-        return data.songs[0].al.picUrl || '';
+        // picUrl 返回 http://，HTTPS 页面混合内容会被拦截，必须升级为 https
+        return toHttps(data.songs[0].al.picUrl) || '';
       }
       return '';
     }).catch(function () { return ''; });
@@ -3104,8 +3118,8 @@
           return {
             id: String(s.id), name: s.name || '',
             artist: ar.map(function(a) { return a.name; }).join(' / '),
-            album: al.name || '', picId: al.picUrl || '',
-            cover: al.picUrl || '', lyricId: String(s.id),
+            album: al.name || '', picId: toHttps(al.picUrl) || '',
+            cover: toHttps(al.picUrl) || '', lyricId: String(s.id),
             duration: Math.round((s.duration || s.dt || 0) / 1000),
             platform: 'netease', _personal: true
           };
@@ -3697,8 +3711,8 @@
         return {
           id: String(s.id), name: s.name || '',
           artist: ar.map(function(a) { return a.name; }).join(' / '),
-          album: al.name || '', picId: al.picUrl || '',
-          cover: al.picUrl || '', lyricId: String(s.id),
+          album: al.name || '', picId: toHttps(al.picUrl) || '',
+          cover: toHttps(al.picUrl) || '', lyricId: String(s.id),
           duration: Math.round((s.dt || s.duration || 0) / 1000),
           platform: 'netease', _personal: true
         };
@@ -3724,6 +3738,7 @@
       var s = songs[i];
       var cover = s.album ? (s.album.picUrl || s.album.coverImgUrl || '') : (s.picUrl || s.cover || '');
       if (cover && cover.indexOf('//') === 0) cover = 'https:' + cover;
+      cover = toHttps(cover) || '';
       var artist = s.artist || (s.ar ? s.ar.map(function(a){return a.name;}).join(' / ') : '');
       var name = s.name || '';
       html += '<div class="rmp-song-item" data-rec-index="' + i + '">';
@@ -3832,8 +3847,8 @@
         return {
           id: String(t.id), name: t.name || '',
           artist: ar.map(function(a) { return a.name; }).join(' / '),
-          album: al.name || '', picId: al.picUrl || '',
-          cover: al.picUrl || '', lyricId: String(t.id),
+          album: al.name || '', picId: toHttps(al.picUrl) || '',
+          cover: toHttps(al.picUrl) || '', lyricId: String(t.id),
           duration: Math.round((t.dt || t.duration || 0) / 1000), platform: 'netease',
           _personal: true
         };
@@ -4225,8 +4240,8 @@
                 return {
                   id: String(s.id), name: s.name || '',
                   artist: ar.map(function (a) { return a.name; }).join(' / '),
-                  album: al.name || '', picId: al.picUrl || '',
-                  cover: al.picUrl || '', lyricId: String(s.id),
+                  album: al.name || '', picId: toHttps(al.picUrl) || '',
+                  cover: toHttps(al.picUrl) || '', lyricId: String(s.id),
                   duration: Math.round((s.duration || s.dt || 0) / 1000),
                   platform: 'netease', _personal: true
                 };
