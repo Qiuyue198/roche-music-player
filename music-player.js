@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.15.11';
+  var BUILD_TIME = '2026-07-31-v1.15.12';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -586,6 +586,14 @@
         if (!blob.size) {
           if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('音频为空，链接可能已过期');
           return;
+        }
+        // 返回的是HTML而非音频：打印内容定位原因
+        var ct = blob.type || '';
+        if (ct.indexOf('text/html') >= 0) {
+          return blob.text().then(function (txt) {
+            console.log('[audio] HTML内容:', txt.substring(0, 1000));
+            if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('音频源返回HTML页面，无法播放');
+          });
         }
         var objUrl = URL.createObjectURL(blob);
         STATE.audio.src = objUrl;
@@ -3985,7 +3993,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.15.11',
+    version: '1.15.12',
 
     apps: [{
       id: 'roche-music-player-home',
