@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.13.0';
+  var BUILD_TIME = '2026-07-31-v1.14.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -121,12 +121,44 @@
     Object.keys(params).forEach(function (key) {
       url += '&' + encodeURIComponent(key) + '=' + encodeURIComponent(params[key]);
     });
-    // 网易云请求带上 cookie（通过请求头传递，不放在 URL 里，避免日志泄露）
+    // 网易云已改为直连 music.163.com，不再通过 GD 后端中转
     var headers = { 'Accept': 'application/json' };
-    if (STATE.cookie && (params.source === 'netease' || action.indexOf('netease') === 0)) {
-      headers['X-Netease-Cookie'] = STATE.cookie;
-    }
     return fetch(url, { headers: headers }).then(function (res) { return res.json(); });
+  }
+
+  // 网易云直连 API（直接调用 music.163.com，不走 GD 后端）
+  function neteaseApi(url, data, method) {
+    method = method || 'GET';
+    var headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Referer': 'https://music.163.com/',
+      'Cookie': STATE.cookie
+    };
+    var body = null;
+    if (data) {
+      if (typeof data === 'object') {
+        body = Object.keys(data).map(function(k) {
+          return encodeURIComponent(k) + '=' + encodeURIComponent(data[k]);
+        }).join('&');
+      } else {
+        body = String(data);
+      }
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    }
+    return fetch('https://music.163.com' + url, {
+      method: method, headers: headers, body: body
+    }).then(function(r) { return r.json(); });
+  }
+  
+  // 从 Cookie 提取 __csrf
+  function getNeCsrf() {
+    if (!STATE.cookie) return '';
+    var parts = STATE.cookie.split(';');
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i].trim();
+      if (p.indexOf('__csrf=') === 0) return p.substring(7);
+    }
+    return '';
   }
 
   // 搜索音乐 —— 全平台 / 单源轮询（网易云最多重试10次）
@@ -156,28 +188,31 @@
     function pollSingle(src, retries, maxRetries) {
       retries = retries || 0;
       maxRetries = maxRetries || 4;
-      // 网易云有cookie走原生，否则走GD单源
+      // 网易云有cookie直接调官方API
       if (src === 'netease' && STATE.cookie) {
-        return api('netease_native_search', { keywords: keywords, limit: limit }).then(function (data) {
-          var songs = data.songs || data.results || [];
+        return neteaseApi('/api/search/get?s=' + encodeURIComponent(keywords) + '&type=1&limit=' + limit).then(function(resp) {
+          var result = resp.result || {};
+          var songs = result.songs || [];
           if (songs.length > 0) {
-            return songs.map(function (s) {
+            return songs.map(function(s) {
+              var al = s.album || s.al || {};
+              var ar = s.artists || s.ar || [];
               return {
                 id: String(s.id), name: s.name || '',
-                artist: (s.ar || []).map(function (a) { return a.name; }).join(' / '),
-                album: s.al ? s.al.name : '', picId: s.al ? s.al.picUrl : '',
-                lyricId: String(s.id), cover: s.al ? s.al.picUrl : '',
-                duration: Math.round((s.dt || 0) / 1000), platform: 'netease'
+                artist: ar.map(function(a) { return a.name; }).join(' / '),
+                album: al.name || '', picId: al.picUrl || '',
+                lyricId: String(s.id), cover: al.picUrl || '',
+                duration: Math.round((s.duration || s.dt || 0) / 1000), platform: 'netease'
               };
             });
           }
           if (retries < maxRetries) {
-            return new Promise(function (resolve) {
-              setTimeout(function () { resolve(pollSingle(src, retries + 1, maxRetries)); }, 800 + retries * 400);
+            return new Promise(function(resolve) {
+              setTimeout(function() { resolve(pollSingle(src, retries + 1, maxRetries)); }, 800 + retries * 400);
             });
           }
           return [];
-        }).catch(function () { return []; });
+        }).catch(function() { return []; });
       }
       // GD API 单源搜索
       return api('search', { source: src, keywords: keywords, limit: limit }).then(function (data) {
@@ -240,18 +275,21 @@
     // 全平台：search_all + 登录时额外原生网易云
     var nativePromise = Promise.resolve([]);
     if (STATE.cookie) {
-      nativePromise = api('netease_native_search', { keywords: keywords, limit: limit }).then(function (data) {
-        var songs = data.songs || data.results || [];
-        return songs.map(function (s) {
+      nativePromise = neteaseApi('/api/search/get?s=' + encodeURIComponent(keywords) + '&type=1&limit=' + limit).then(function(resp) {
+        var result = resp.result || {};
+        var songs = result.songs || [];
+        return songs.map(function(s) {
+          var al = s.album || s.al || {};
+          var ar = s.artists || s.ar || [];
           return {
             id: String(s.id), name: s.name || '',
-            artist: (s.ar || []).map(function (a) { return a.name; }).join(' / '),
-            album: s.al ? s.al.name : '', picId: s.al ? s.al.picUrl : '',
-            lyricId: String(s.id), cover: s.al ? s.al.picUrl : '',
-            duration: Math.round((s.dt || 0) / 1000), platform: 'netease'
+            artist: ar.map(function(a) { return a.name; }).join(' / '),
+            album: al.name || '', picId: al.picUrl || '',
+            lyricId: String(s.id), cover: al.picUrl || '',
+            duration: Math.round((s.duration || s.dt || 0) / 1000), platform: 'netease'
           };
         });
-      }).catch(function () { return []; });
+      }).catch(function() { return []; });
     }
     return Promise.all([pollSearchAll(0), nativePromise]).then(function (results) {
       var gdSongs = results[0] || [];
@@ -330,8 +368,14 @@
     var cleanId = String(id).indexOf(':') >= 0 ? String(id).split(':').pop() : String(id);
     var br = quality || STATE.quality;
     if (STATE.cookie && (source === 'netease')) {
-      return api('netease_native_url', { id: cleanId, br: br }).then(function (data) {
-        return data.url || '';
+      var csrf = getNeCsrf();
+      var brMap = { 'standard': 'standard', 'high': 'higher', 'lossless': 'lossless' };
+      var level = brMap[br] || 'standard';
+      return neteaseApi('/api/song/enhance/player/url/v1?csrf_token=' + encodeURIComponent(csrf),
+        { ids: '[' + cleanId + ']', level: level, encodeType: 'aac' }, 'POST'
+      ).then(function(resp) {
+        var d = (resp.data || [])[0] || {};
+        return d.url || '';
       });
     }
     return api('song_url', { id: cleanId, source: source, br: br }).then(function (data) {
@@ -394,8 +438,10 @@
     if (!lyricId) return Promise.resolve({ lyric: '', tlyric: '' });
     var cleanId = String(lyricId).indexOf(':') >= 0 ? String(lyricId).split(':').pop() : String(lyricId);
     if (STATE.cookie && (source === 'netease')) {
-      return api('netease_native_lyric', { id: cleanId }).then(function (data) {
-        return { lyric: data.lyric || '', tlyric: data.tlyric || '' };
+      return neteaseApi('/api/song/lyric?id=' + encodeURIComponent(cleanId) + '&lv=1&kv=1&tv=-1').then(function(resp) {
+        var lrc = (resp.lrc || {}).lyric || '';
+        var tlyric = (resp.tlyric || {}).lyric || '';
+        return { lyric: lrc, tlyric: tlyric };
       });
     }
     return api('lyric', { id: cleanId, source: source }).then(function (data) {
@@ -3384,27 +3430,22 @@
   function loadDailyRecommend() {
     var refs = STATE.appRefs;
     if (!refs.neRecsList) return;
-    refs.neRecsList.innerHTML = '<div class="rmp-loading"><div class="rmp-spinner"></div></div>';
-    // 优先用 MCP 服务器
-    var useMcp = STATE.mcpToken;
-    if (useMcp) {
-      fetch(STATE.mcpBackend.replace(/\/+$/, '') + '/recommend?_token=' + encodeURIComponent(STATE.mcpToken))
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          var songs = data.songs || data.data || [];
-          renderRecsList(songs);
-        }).catch(function() {
-          refs.neRecsList.innerHTML = '<div class="rmp-empty-state">加载失败，请确认已登录</div>';
-        });
-    } else {
-      // 用 cookie 调网易云 API
-      api('netease_recommend_songs', {}).then(function(data) {
-        var songs = data.songs || data.data || [];
-        renderRecsList(songs);
-      }).catch(function() {
-        refs.neRecsList.innerHTML = '<div class="rmp-empty-state">加载失败，请先设置 Cookie</div>';
-      });
+    if (!STATE.cookie) {
+      refs.neRecsList.innerHTML = '<div class="rmp-empty-state">请先在设置中填写网易云 Cookie</div>';
+      return;
     }
+    refs.neRecsList.innerHTML = '<div class="rmp-loading"><div class="rmp-spinner"></div></div>';
+    var csrf = getNeCsrf();
+    neteaseApi('/api/v3/discovery/recommend/songs?csrf_token=' + encodeURIComponent(csrf), '{}', 'POST').then(function(resp) {
+      var songs = (resp.data || {}).dailySongs || [];
+      if (songs.length === 0) {
+        refs.neRecsList.innerHTML = '<div class="rmp-empty-state">今日暂无推荐，请确认Cookie有效</div>';
+        return;
+      }
+      renderRecsList(songs);
+    }).catch(function() {
+      refs.neRecsList.innerHTML = '<div class="rmp-empty-state">加载失败，请检查Cookie是否有效</div>';
+    });
   }
 
   function renderRecsList(songs) {
@@ -3451,11 +3492,15 @@
   function loadUserPlaylists() {
     var refs = STATE.appRefs;
     if (!refs.nePlaylists) return;
+    if (!STATE.cookie) {
+      refs.nePlaylists.innerHTML = '<div class="rmp-empty-state">请先在设置中填写网易云 Cookie</div>';
+      return;
+    }
     refs.nePlaylists.innerHTML = '<div class="rmp-loading"><div class="rmp-spinner"></div></div>';
 
     function renderPls(list) {
       if (!list || list.length === 0) {
-        refs.nePlaylists.innerHTML = '<div class="rmp-empty-state">暂无歌单，请先登录</div>';
+        refs.nePlaylists.innerHTML = '<div class="rmp-empty-state">暂无歌单，请确认已登录</div>';
         return;
       }
       var html = '';
@@ -3474,46 +3519,63 @@
       refs.nePlaylists.innerHTML = html;
     }
 
-    // 优先用 MCP 服务器
-    if (STATE.mcpToken) {
-      fetch(STATE.mcpBackend.replace(/\/+$/, '') + '/user/playlists?_token=' + encodeURIComponent(STATE.mcpToken))
-        .then(function(r) { return r.json(); }).then(function(data) {
-          renderPls(data.playlists || data.data || []);
-        }).catch(function() {
-          // 降级到 GD API
-          api('netease_user_playlists', {}).then(function(data) {
-            renderPls(data.playlists || []);
-          }).catch(function() { refs.nePlaylists.innerHTML = '<div class="rmp-empty-state">加载失败</div>'; });
-        });
-    } else {
-      api('netease_user_playlists', {}).then(function(data) {
-        renderPls(data.playlists || []);
-      }).catch(function() { refs.nePlaylists.innerHTML = '<div class="rmp-empty-state">加载失败，请先设置 Cookie</div>'; });
-    }
+    // 先获取用户ID，再获取歌单
+    neteaseApi('/api/nuser/account/get').then(function(resp) {
+      var uid = (resp.profile || {}).userId;
+      if (!uid) {
+        refs.nePlaylists.innerHTML = '<div class="rmp-empty-state">获取用户信息失败，Cookie可能已过期</div>';
+        return;
+      }
+      return neteaseApi('/api/user/playlist?uid=' + uid + '&limit=50&offset=0');
+    }).then(function(resp) {
+      if (!resp) return;
+      renderPls(resp.playlist || []);
+    }).catch(function() {
+      refs.nePlaylists.innerHTML = '<div class="rmp-empty-state">加载失败，请检查Cookie</div>';
+    });
   }
 
   // 加载歌单歌曲
   function loadPlaylistSongs(plId) {
     var refs = STATE.appRefs;
+    if (!STATE.cookie) {
+      refs.neSearchResults.innerHTML = '<div class="rmp-empty-state">请先设置Cookie</div>';
+      return;
+    }
     refs.neSearchResults.innerHTML = '<div class="rmp-loading"><div class="rmp-spinner"></div></div>';
-    // 切到搜索子面板显示结果
     refs.neSubnavBtns.forEach(function(b) { b.classList.toggle('active', b.getAttribute('data-nsub') === 'search'); });
     refs.neSubpanels.forEach(function(p) { p.classList.toggle('active', p.getAttribute('data-nsub') === 'search'); });
 
-    if (STATE.mcpToken) {
-      fetch(STATE.mcpBackend.replace(/\/+$/, '') + '/playlist?id=' + plId + '&_token=' + encodeURIComponent(STATE.mcpToken))
-        .then(function(r) { return r.json(); }).then(function(data) {
-          var tracks = data.tracks || data.data || [];
-          STATE.searchResults = tracks;
-          renderNeSearchResults();
-        }).catch(function() { refs.neSearchResults.innerHTML = '<div class="rmp-empty-state">加载失败</div>'; });
-    } else {
-      api('netease_playlist_detail', { id: plId }).then(function(data) {
-        var tracks = data.songs || data.tracks || [];
-        STATE.searchResults = tracks;
-        renderNeSearchResults();
-      }).catch(function() { refs.neSearchResults.innerHTML = '<div class="rmp-empty-state">加载失败</div>'; });
-    }
+    neteaseApi('/api/v6/playlist/detail?id=' + plId).then(function(resp) {
+      var playlist = resp.playlist || {};
+      var tracks = playlist.tracks || [];
+      if (tracks.length === 0) {
+        var trackIds = (playlist.trackIds || []).slice(0, 50);
+        if (trackIds.length > 0) {
+          var ids = trackIds.map(function(t) { return t.id; });
+          return neteaseApi('/api/song/detail?ids=' + JSON.stringify(ids));
+        }
+        return null;
+      }
+      return { songs: tracks };
+    }).then(function(resp) {
+      if (!resp) { refs.neSearchResults.innerHTML = '<div class="rmp-empty-state">歌单为空</div>'; return; }
+      var tracks = resp.songs || resp.tracks || [];
+      STATE.searchResults = tracks.map(function(t) {
+        var ar = t.ar || t.artists || [];
+        var al = t.al || t.album || {};
+        return {
+          id: String(t.id), name: t.name || '',
+          artist: ar.map(function(a) { return a.name; }).join(' / '),
+          album: al.name || '', picId: al.picUrl || '',
+          cover: al.picUrl || '', lyricId: String(t.id),
+          duration: Math.round((t.dt || t.duration || 0) / 1000), platform: 'netease'
+        };
+      });
+      renderNeSearchResults();
+    }).catch(function() {
+      refs.neSearchResults.innerHTML = '<div class="rmp-empty-state">加载失败</div>';
+    });
   }
 
   // 退出登录
