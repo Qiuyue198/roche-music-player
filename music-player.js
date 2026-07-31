@@ -396,11 +396,9 @@
     }).catch(function () { return ''; });
   }
 
-  // 通过网易云官方API获取歌曲封面URL（绕过GD音乐台返回的过期URL）
+  // 通过网易云官方API获取歌曲封面URL（通过VPS代理，避免CORS）
   function getNeteaseCover(songId) {
-    return fetch('https://music.163.com/api/song/detail?ids=%5B' + encodeURIComponent(songId) + '%5D', {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-    }).then(function (res) { return res.json(); }).then(function (data) {
+    return neteaseApi('/api/song/detail?ids=%5B' + encodeURIComponent(songId) + '%5D').then(function (data) {
       if (data && data.code === 200 && data.songs && data.songs[0] && data.songs[0].al) {
         return data.songs[0].al.picUrl || '';
       }
@@ -589,8 +587,8 @@
       // 加载歌词（使用 lyricId）
       loadLyrics(song);
       // 异步获取专辑封面
-      // 网易云源始终刷新（GD音乐台返回的封面URL已全部404），其他源仅在缺失时获取
-      var needCoverRefresh = song.platform === 'netease' || (!song.cover && song.picId);
+      // GD音乐台netease源封面URL全部404，需刷新；个人网易云封面直接来自API，有效跳过
+      var needCoverRefresh = (song.platform === 'netease' && !song._personal) || (!song.cover && song.picId);
       if (needCoverRefresh && song.picId) {
         getPicUrl(song.picId, song.platform || STATE.defaultSource).then(function (picUrl) {
           if (STATE.currentSong !== song) return;
