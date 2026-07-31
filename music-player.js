@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.10.2';
+  var BUILD_TIME = '2026-07-31-v1.11.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -404,15 +404,15 @@
   }
 
   // 获取网易云扫码登录二维码（通过 CF Worker 后端，避免 CORS）
-  // MCP 服务器 API 调用（通过 CF Worker HTTPS 代理到腾讯云 MCP 服务器）
+  // MCP 服务器 API 调用（通过 CF Worker /music 端点透传到腾讯云）
   function mcpApi(endpoint, params) {
     params = params || {};
-    var url = STATE.backend.replace(/\/+$/, '') + '/mcp/' + endpoint.replace(/^\/+/, '');
-    var qs = [];
+    // login/start → mcp_login_start, user/playlists → mcp_user_playlists
+    var actionName = 'mcp_' + endpoint.replace(/\//g, '_');
+    var url = STATE.backend.replace(/\/+$/, '') + '/music?action=' + encodeURIComponent(actionName);
     Object.keys(params).forEach(function(k) {
-      qs.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
+      url += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
     });
-    if (qs.length > 0) url += '?' + qs.join('&');
     return fetch(url).then(function(r) { return r.json(); });
   }
 
