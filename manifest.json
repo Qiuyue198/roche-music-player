@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.17.0",
-  "description": "v1.17.0：新增自部署网易云API地址——可一键部署NeteaseCloudMusicApi到自己的Vercel，网易云请求改发到你配置的地址，数据流向更可控",
+  "version": "1.18.0",
+  "description": "v1.18.0：移除内置默认服务器——网易云个人功能改为使用你自行配置的API地址，请求只发往你配置的实例；移除扫码登录",
   "author": "Roche",
-  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@v1.17.0/music-player.js",
+  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@v1.18.0/music-player.js",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }

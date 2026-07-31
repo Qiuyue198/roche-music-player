@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.17.0';
+  var BUILD_TIME = '2026-07-31-v1.18.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -39,10 +39,9 @@
     tlyrics: [],              // 解析后的翻译歌词 [{time, text}]
     currentLyricIndex: -1,    // 当前歌词行索引
     cookie: '',               // 网易云 cookie
-    backend: 'https://456.chajianreader.cc.cd', // 后端地址（CF Worker，网易云直连接口自动转发到Vercel）
-    mcpBackend: 'https://ncm.chajianreader.cc.cd', // 网易云 MCP 服务器（HTTPS 直连腾讯云，扫码登录+开放平台API）
-    // 自部署网易云 API 地址（NeteaseCloudMusicApi 兼容实例，如 https://xxx.vercel.app）
-    // 填了之后网易云个人功能请求改发往使用者自己的实例
+    backend: 'https://456.chajianreader.cc.cd', // 第三方音乐源（GD 音乐台）后端地址
+    // 网易云 API 地址（NeteaseCloudMusicApi 兼容实例，如 https://xxx.vercel.app）
+    // 网易云个人功能（搜索/歌单/歌词/播放/每日推荐）全部请求发往这里，由使用者自己部署与配置
     neteaseApiBase: '',
     mcpToken: '',             // MCP 服务器 accessToken（扫码登录后获取）
     defaultSource: 'netease', // 默认音源
@@ -171,53 +170,16 @@
   }
 
   // 网易云 API
-  // 优先走使用者自部署的 NeteaseCloudMusicApi 实例（STATE.neteaseApiBase，Cookie 只去使用者自己的服务器）
-  // 未配置时回退到默认后端（/proxy 转发）
+  // 请求全部发往使用者自己配置的 NeteaseCloudMusicApi 实例（STATE.neteaseApiBase）
+  // 未配置时直接拒绝并给出提示（无内置默认服务器）
   function neteaseApi(path, data, method) {
     method = method || 'GET';
     var base = (STATE.neteaseApiBase || '').replace(/\/+$/, '');
-    if (base) {
-      return ncmApi(base, path, data, method);
+    if (!base) {
+      console.error('[neteaseApi] 未配置网易云 API 地址', path);
+      return Promise.reject(new Error('未配置网易云 API 地址，请到「设置」页填写'));
     }
-    // ===== 回退模式：默认后端 /proxy 转发 =====
-    var fullUrl = 'https://music.163.com' + path;
-    var proxyUrl = STATE.mcpBackend.replace(/\/+$/, '') + '/proxy?url=' + encodeURIComponent(fullUrl);
-    var fetchOpts = {
-      method: method,
-      headers: { 'X-Netease-Cookie': STATE.cookie }
-    };
-    if (data && method === 'POST') {
-      if (typeof data === 'object') {
-        var pairs = [];
-        Object.keys(data).forEach(function(k) { pairs.push(encodeURIComponent(k) + '=' + encodeURIComponent(data[k])); });
-        fetchOpts.body = pairs.join('&');
-      } else {
-        fetchOpts.body = String(data);
-      }
-      fetchOpts.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-    }
-    console.log('[neteaseApi]', method, proxyUrl, fetchOpts.body || '');
-    var fetchPromise = fetch(proxyUrl, fetchOpts).then(function(r) {
-      return r.text().then(function(text) {
-        console.log('[neteaseApi 响应原文]', method, path, 'HTTP', r.status, '长度=' + text.length, text.substring(0, 600));
-        try {
-          var json = JSON.parse(text);
-          console.log('[neteaseApi 响应]', method, path, json);
-          return json;
-        } catch (e) {
-          console.error('[neteaseApi JSON解析失败]', text.substring(0, 600));
-          throw e;
-        }
-      });
-    });
-    // 加 20 秒超时：避免 VPS/网络慢导致请求无限挂起、界面"毫无反应"
-    var timeoutPromise = new Promise(function (resolve, reject) {
-      setTimeout(function () { reject(new Error('neteaseApi 请求超时: ' + path)); }, 20000);
-    });
-    return Promise.race([fetchPromise, timeoutPromise]).catch(function(e) {
-      console.error('[neteaseApi 失败]', method, path, e.message || e);
-      throw e;
-    });
+    return ncmApi(base, path, data, method);
   }
 
   // 自部署 NeteaseCloudMusicApi 实例适配：
@@ -515,23 +477,9 @@
           return '';
         });
       }
-      // 回退方案（weapi）：默认后端 /play 返回 weapi_url，经 /proxy 拉音频流
-      var playUrl = STATE.mcpBackend.replace(/\/+$/, '') + '/play?id=' + encodeURIComponent(cleanId);
-      console.log('[getSongUrl 个人网易云-weapi] songId=' + cleanId + ' playUrl=' + playUrl);
-      return fetch(playUrl).then(function (r) { return r.json(); }).then(function (data) {
-        var weapiUrl = data && data.weapi_url ? data.weapi_url : '';
-        if (!weapiUrl) {
-          console.error('[getSongUrl 个人网易云-weapi] 未返回weapi_url', data);
-          return '';
-        }
-        var url = STATE.mcpBackend.replace(/\/+$/, '') + '/proxy?url=' + encodeURIComponent(weapiUrl);
-        console.log('[getSongUrl 个人网易云-weapi] weapi_url=' + weapiUrl + ' proxy=' + url);
-        STATE.songUrlCache[cacheKey] = { url: url, ts: Date.now() };
-        return url;
-      }).catch(function (e) {
-        console.error('[getSongUrl 个人网易云-weapi] 失败', e.message || e);
-        return '';
-      });
+      // 网易云 API 地址未配置：无法获取个人网易云播放链接
+      console.error('[getSongUrl 个人网易云] 未配置网易云 API 地址 songId=' + cleanId);
+      return Promise.resolve('');
     }
     return api('song_url', { id: cleanId, source: source, br: br }).then(function (data) {
       var url = data.url || '';
@@ -648,26 +596,6 @@
     return api('lyric', { id: cleanId, source: source }).then(function (data) {
       return { lyric: data.lyric || data.lrc || '', tlyric: data.tlyric || '' };
     });
-  }
-
-  // 网易云 MCP 服务器 API 调用（HTTPS 直连腾讯云）
-  function mcpApi(endpoint, params) {
-    params = params || {};
-    var url = STATE.mcpBackend.replace(/\/+$/, '') + '/' + endpoint;
-    var qs = Object.keys(params).map(function(k) {
-      return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
-    }).join('&');
-    if (qs) url += '?' + qs;
-    return fetch(url).then(function(r) { return r.json(); });
-  }
-
-  function getQrLogin() {
-    return mcpApi('login/start');
-  }
-
-  // 检查扫码状态
-  function checkQrLogin(key) {
-    return mcpApi('login/check');
   }
 
   // ==================== 音频引擎 ====================
@@ -853,6 +781,10 @@
     // 获取播放 URL（非网易云音源使用降级重试）
     var urlPromise;
     if (song._personal && STATE.cookie) {
+      if (!(STATE.neteaseApiBase || '').replace(/\/+$/, '')) {
+        if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('请先在设置中填写网易云 API 地址');
+        return;
+      }
       urlPromise = getSongUrl(song.id, 'netease', undefined, song._personal);
     } else if (song.platform === 'netease') {
       urlPromise = getSongUrlFallback(song.id, 'netease');
@@ -3156,10 +3088,10 @@
           </div>\
         </div>\
         <div class="rmp-settings-group">\
-          <label class="rmp-settings-label">网易云 API 地址（自部署）</label>\
-          <input type="text" class="rmp-settings-input rmp-nea-base-input" placeholder="https://你的实例.vercel.app（留空使用默认服务器）" />\
+          <label class="rmp-settings-label">网易云 API 地址</label>\
+          <input type="text" class="rmp-settings-input rmp-nea-base-input" placeholder="https://你的实例.vercel.app" />\
           <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:4px;">\
-            可选。一键部署 NeteaseCloudMusicApi 到自己的 Vercel 后填入地址，网易云请求改发往你配置的地址；留空使用默认服务器\
+            网易云个人功能需要该地址：一键部署 NeteaseCloudMusicApi 到自己的 Vercel 后填入，网易云请求将发往你配置的地址\
           </div>\
         </div>\
         <div class="rmp-settings-group">\
@@ -3380,10 +3312,11 @@
       if (sn) sn.removeEventListener('click', onNSubClick);
     });
 
-    // ===== 网易云登录/退出 =====
+    // ===== 网易云登录区 =====
     if (refs.neLoginBtn) {
-      refs.neLoginBtn.addEventListener('click', startQrLogin);
-      STATE.appCleanups.push(function () { refs.neLoginBtn.removeEventListener('click', startQrLogin); });
+      function goNeSetup() { switchTab('settings'); }
+      refs.neLoginBtn.addEventListener('click', goNeSetup);
+      STATE.appCleanups.push(function () { refs.neLoginBtn.removeEventListener('click', goNeSetup); });
     }
     if (refs.neLogoutBtn) {
       refs.neLogoutBtn.addEventListener('click', doLogout);
@@ -3598,7 +3531,7 @@
     function onSaveSettings() {
       var backend = refs.backendInput.value.trim();
       if (backend) { STATE.backend = backend.replace(/\/+$/, ''); }
-      // 自部署网易云 API 地址（留空 = 使用默认服务器）
+      // 自部署网易云 API 地址（可选，不填则保持插件默认方式）
       var neaBase = refs.neaBaseInput.value.trim();
       STATE.neteaseApiBase = neaBase ? neaBase.replace(/\/+$/, '') : '';
       STATE.defaultSource = refs.defaultSourceSelect.value;
@@ -3613,7 +3546,11 @@
         }
         // 先保存 cookie 再验证
         saveSettings();
-        // 验证 cookie 有效性（走 neteaseApi：自部署实例时验证请求也直达使用者自己的实例）
+        // 验证 cookie 有效性（请求发往使用者配置的网易云 API 地址）
+        if (!(STATE.neteaseApiBase || '').replace(/\/+$/, '')) {
+          if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('请先填写网易云 API 地址，再验证 Cookie');
+          return;
+        }
         neteaseApi('/api/nuser/account/get').then(function (data) {
           var profile = data.profile || {};
           if (profile.userId) {
@@ -4223,106 +4160,6 @@
     if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('已退出网易云登录');
   }
 
-  // 网易云扫码登录（动态创建弹窗）
-  function startQrLogin() {
-    // 清除旧弹窗
-    var oldModal = document.querySelector('.rmp-qr-modal');
-    if (oldModal) oldModal.remove();
-    if (STATE.qrPollTimer) { clearInterval(STATE.qrPollTimer); STATE.qrPollTimer = null; }
-
-    // 创建弹窗
-    var overlay = document.createElement('div');
-    overlay.className = 'rmp-qr-modal';
-    overlay.innerHTML = '<div class="rmp-qr-modal-mask"></div>' +
-      '<div class="rmp-qr-modal-box">' +
-        '<div class="rmp-qr-modal-close">×</div>' +
-        '<div class="rmp-qr-modal-title">网易云扫码登录</div>' +
-        '<div class="rmp-qr-modal-body">' +
-          '<div class="rmp-qr-img-wrap"><img class="rmp-qr-img-el" style="display:none;" /><div class="rmp-qr-placeholder-el">正在获取二维码...</div></div>' +
-          '<div class="rmp-qr-status-el"></div>' +
-        '</div>' +
-      '</div>';
-    document.body.appendChild(overlay);
-
-    var qrImg = overlay.querySelector('.rmp-qr-img-el');
-    var qrPlaceholder = overlay.querySelector('.rmp-qr-placeholder-el');
-    var qrStatus = overlay.querySelector('.rmp-qr-status-el');
-
-    // 关闭按钮
-    overlay.querySelector('.rmp-qr-modal-close').addEventListener('click', function() {
-      overlay.remove();
-      if (STATE.qrPollTimer) { clearInterval(STATE.qrPollTimer); STATE.qrPollTimer = null; }
-    });
-    overlay.querySelector('.rmp-qr-modal-mask').addEventListener('click', function() {
-      overlay.remove();
-      if (STATE.qrPollTimer) { clearInterval(STATE.qrPollTimer); STATE.qrPollTimer = null; }
-    });
-
-    getQrLogin().then(function (data) {
-      if (!data || !data.qr_url) {
-        qrPlaceholder.textContent = '获取二维码失败';
-        qrStatus.textContent = data && data.raw && data.raw.message ? data.raw.message : '请检查网络';
-        qrStatus.className = 'rmp-qr-status-el error';
-        return;
-      }
-      var qrUrl = data.qr_url;
-      var qrImgSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(qrUrl);
-      qrImg.src = qrImgSrc;
-      qrImg.style.display = 'block';
-      qrPlaceholder.style.display = 'none';
-      qrStatus.innerHTML = '请用<strong>网易云音乐 APP</strong>扫码<br><a href="' + qrUrl + '" target="_blank" style="color:#6cf;">手机上打不开？点此链接</a>';
-      qrStatus.className = 'rmp-qr-status-el';
-
-      STATE.qrPollTimer = setInterval(function () {
-        if (!document.body.contains(overlay)) {
-          clearInterval(STATE.qrPollTimer);
-          STATE.qrPollTimer = null;
-          return;
-        }
-        checkQrLogin().then(function (result) {
-          if (!result) return;
-          if (result.logged_in) {
-            qrStatus.textContent = '登录成功！';
-            qrStatus.className = 'rmp-qr-status-el success';
-            if (result.access_token) {
-              STATE.mcpToken = result.access_token;
-              saveSettings();
-            }
-            if (result.user_info && result.user_info.nickname) {
-              STATE.userProfile = result.user_info;
-              STATE.roche.storage.set('rmp_user_profile', JSON.stringify(result.user_info));
-              updateNeteaseLoginUI();
-              if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功：' + result.user_info.nickname);
-            } else {
-              updateNeteaseLoginUI();
-              if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功');
-            }
-            clearInterval(STATE.qrPollTimer);
-            STATE.qrPollTimer = null;
-            setTimeout(function() { overlay.remove(); }, 1500);
-          } else {
-            var raw = result.raw || {};
-            if (raw.code === 800) {
-              qrStatus.textContent = '二维码已过期，请重新获取';
-              qrStatus.className = 'rmp-qr-status-el error';
-              clearInterval(STATE.qrPollTimer);
-              STATE.qrPollTimer = null;
-            } else if (raw.code === 802) {
-              qrStatus.textContent = '待确认，请在手机上点击确认登录';
-              qrStatus.className = 'rmp-qr-status-el';
-            }
-          }
-        }).catch(function () {
-          // 忽略轮询错误
-        });
-      }, 2000);
-    }).catch(function () {
-      qrPlaceholder.textContent = '获取二维码失败';
-      qrStatus.textContent = '请求失败，请检查网络';
-      qrStatus.className = 'rmp-qr-status-el error';
-    });
-  }
-
   // 清理 App
   function cleanupApp() {
     // 清理事件监听器
@@ -4500,7 +4337,7 @@
   window.RochePlugin = window.RochePlugin || {};
 
   // 版本号从 BUILD_TIME 动态读取，防止历次升级漏改写死的旧版本号
-  var PLUGIN_VERSION = BUILD_TIME.indexOf('-v') >= 0 ? BUILD_TIME.split('-v')[1] : '1.17.0';
+  var PLUGIN_VERSION = BUILD_TIME.indexOf('-v') >= 0 ? BUILD_TIME.split('-v')[1] : '1.18.0';
 
   window.RochePlugin.register({
     id: 'roche-music-player',
@@ -4582,8 +4419,8 @@
             if (!STATE.cookie) {
               return Promise.resolve({ success: false, message: '请先在设置中填写网易云 Cookie，或切换到第三方音乐源' });
             }
-            // 用用户自己的网易云账号搜索（走 VPS 代理）
-            // 网易云搜索加超时（12 秒），避免 VPS 慢导致 char 长时间等待
+            // 用用户自己的网易云账号搜索（请求发往使用者配置的网易云 API 地址）
+            // 网易云搜索加超时（12 秒），避免网络慢导致 char 长时间等待
             var searchPromise = neteaseApi('/api/search/get?s=' + encodeURIComponent(keyword) + '&type=1&limit=' + limit);
             var timeoutPromise = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 12000); });
             return Promise.race([searchPromise, timeoutPromise]).then(function (resp) {
