@@ -4,7 +4,7 @@
   "version": "1.13.0",
   "description": "音乐播放器，网易云专属前端+歌单+推荐，MCP直连腾讯云",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/yechen1844/roche-music-player/main/music-player.js?ts=20260731v4",
+  "entry": "https://raw.githubusercontent.com/yechen1844/roche-music-player/main/music-player.js?ts=20260731v5",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
