@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.11.0';
+  var BUILD_TIME = '2026-07-31-v1.12.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -17,7 +17,7 @@
     currentLyricIndex: -1,    // 当前歌词行索引
     cookie: '',               // 网易云 cookie
     backend: 'https://456.chajianreader.cc.cd', // 后端地址（CF Worker，网易云直连接口自动转发到Vercel）
-    mcpBackend: 'http://43.128.227.97:8080', // 网易云 MCP 服务器（扫码登录+开放平台API）
+    mcpBackend: 'https://ncm.chajianreader.cc.cd', // 网易云 MCP 服务器（HTTPS 直连腾讯云，扫码登录+开放平台API）
     mcpToken: '',             // MCP 服务器 accessToken（扫码登录后获取）
     defaultSource: 'joox', // 默认音源
     quality: 'standard',      // 音质
@@ -403,11 +403,10 @@
     });
   }
 
-  // 获取网易云扫码登录二维码（通过 CF Worker 后端，避免 CORS）
-  // MCP 服务器 API 调用（通过 CF Worker /music/ncm 路径透传到腾讯云）
+  // 网易云 MCP 服务器 API 调用（HTTPS 直连腾讯云）
   function mcpApi(endpoint, params) {
     params = params || {};
-    var url = STATE.backend.replace(/\/+$/, '') + '/music/ncm/' + endpoint;
+    var url = STATE.mcpBackend.replace(/\/+$/, '') + '/' + endpoint;
     var qs = Object.keys(params).map(function(k) {
       return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
     }).join('&');
