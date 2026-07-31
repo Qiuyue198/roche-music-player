@@ -2,7 +2,7 @@
   "id": "roche-music-player",
   "name": "音乐播放器",
   "version": "1.15.1",
-  "description": "音乐播放器，neteaseApi走VPS代理，GD播放列表还原",
+  "description": "音乐播放器，neteaseApi走VPS代理，播放列表恢复为独立页面",
   "author": "Roche",
   "entry": "https://raw.githubusercontent.com/yechen1844/roche-music-player/v1.15.1/music-player.js",
   "hash": "",

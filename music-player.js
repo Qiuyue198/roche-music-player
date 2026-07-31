@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.15.0';
+  var BUILD_TIME = '2026-07-31-v1.15.1';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -2554,6 +2554,7 @@
     <div class="rmp-tabs">\
       <button class="rmp-tab active" data-tab="netease">网易云音乐</button>\
       <button class="rmp-tab" data-tab="gd">GD音乐台</button>\
+      <button class="rmp-tab" data-tab="playlist">播放列表</button>\
       <button class="rmp-tab" data-tab="settings">设置</button>\
     </div>\
     <button class="rmp-close-btn" title="关闭">关闭</button>\
@@ -2659,7 +2660,10 @@
         <button class="rmp-btn rmp-gd-search-btn">搜索</button>\
       </div>\
       <div class="rmp-search-results rmp-gd-results"></div>\
-      <div class="rmp-playlist-section" style="margin-top:12px;">\
+    </div>\
+    <!-- ===== 播放列表面板（独立页面）===== -->\
+    <div class="rmp-panel" data-panel="playlist">\
+      <div class="rmp-card" style="padding:12px;">\
         <div class="rmp-playlist-header">\
           <span class="rmp-playlist-count">0 首</span>\
           <button class="rmp-clear-btn rmp-clear-playlist-btn">清空列表</button>\
@@ -2766,7 +2770,7 @@
       gdSearchSource: root.querySelector('.rmp-search-source'),
       gdSearchBtn: root.querySelector('.rmp-gd-search-btn'),
       gdSearchResults: root.querySelector('.rmp-gd-results'),
-      // 播放列表（GD Tab 内）
+      // 播放列表（独立页面）
       playlistCount: root.querySelector('.rmp-playlist-count'),
       playlistItems: root.querySelector('.rmp-playlist-items'),
       clearPlaylistBtn: root.querySelector('.rmp-clear-playlist-btn'),
@@ -2995,7 +2999,7 @@
       STATE.appCleanups.push(function () { refs.gdSearchResults.removeEventListener('click', onGdResultsClick); });
     }
 
-    // ===== 播放列表事件（GD Tab 内） =====
+    // ===== 播放列表事件 =====
     function onPlaylistClick(e) {
       var item = e.target.closest('.rmp-song-item');
       if (!item) return;
@@ -3899,7 +3903,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.9.1',
+    version: '1.15.1',
 
     apps: [{
       id: 'roche-music-player-home',
