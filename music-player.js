@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.16.8';
+  var BUILD_TIME = '2026-07-31-v1.16.9';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -881,10 +881,29 @@
   }
 
   // 跳转到指定时间
+  // 流式播放时 audio.duration 可能是 NaN/Infinity，clamp 用 getSafeDuration 兜底
   function seek(time) {
-    if (STATE.audio && STATE.audio.duration) {
-      STATE.audio.currentTime = Math.max(0, Math.min(time, STATE.audio.duration));
+    if (!STATE.audio) return;
+    var dur = getSafeDuration();
+    var target = dur > 0 ? Math.max(0, Math.min(time, dur)) : Math.max(0, time);
+    STATE.audio.currentTime = target;
+  }
+
+  // 获取可用的播放时长（秒）：audio.duration → seekable 末尾 → 歌曲自带 duration
+  // 个人网易云经 VPS proxy 流式播放时 duration 常为 NaN/Infinity，必须降级
+  function getSafeDuration() {
+    var a = STATE.audio;
+    if (a) {
+      var d = a.duration;
+      if (typeof d === 'number' && isFinite(d) && d > 0) return d;
+      if (a.seekable && a.seekable.length > 0) {
+        var s = a.seekable.end(a.seekable.length - 1);
+        if (typeof s === 'number' && isFinite(s) && s > 0) return s;
+      }
     }
+    var sd = STATE.currentSong ? STATE.currentSong.duration : 0;
+    if (typeof sd === 'number' && isFinite(sd) && sd > 0) return sd;
+    return 0;
   }
 
   // 设置音量
@@ -986,9 +1005,10 @@
       navigator.mediaSession.setActionHandler('pause', function () { togglePlay(); });
       navigator.mediaSession.setActionHandler('previoustrack', function () { playPrev(); });
       navigator.mediaSession.setActionHandler('nexttrack', function () { playNext(); });
-      if ('setPositionState' in navigator.mediaSession && STATE.audio && STATE.audio.duration) {
+      var msDur = getSafeDuration();
+      if ('setPositionState' in navigator.mediaSession && STATE.audio && msDur > 0) {
         navigator.mediaSession.setPositionState({
-          duration: STATE.audio.duration,
+          duration: msDur,
           position: STATE.audio.currentTime,
           playbackRate: STATE.audio.playbackRate
         });
@@ -1458,15 +1478,16 @@
       island.removeEventListener('click', onIslandClick);
     });
 
-    // 进度条拖拽跳转（支持鼠标和触摸）
+    // 进度条拖拽跳转（支持鼠标和触摸；流式播放 duration 无效时用 getSafeDuration 兜底）
     var isDraggingProgress = false;
     function progressSeekFromEvent(e) {
-      if (!STATE.audio || !STATE.audio.duration) return;
+      if (!STATE.audio) return;
       var rect = STATE.islandRefs.progress.getBoundingClientRect();
       var clientX = (e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX);
       var x = clientX - rect.left;
       var percent = Math.max(0, Math.min(1, x / rect.width));
-      seek(percent * STATE.audio.duration);
+      var dur = getSafeDuration();
+      seek(dur > 0 ? percent * dur : 0);
     }
     function onProgressStart(e) {
       e.stopPropagation();
@@ -1787,16 +1808,14 @@
   // 更新灵动岛进度
   function updateIslandProgress() {
     if (!STATE.islandRefs.progressFill || !STATE.audio) return;
-    var percent = 0;
-    if (STATE.audio.duration) {
-      percent = (STATE.audio.currentTime / STATE.audio.duration) * 100;
-    }
+    var dur = getSafeDuration();
+    var percent = dur > 0 ? (STATE.audio.currentTime / dur) * 100 : 0;
     STATE.islandRefs.progressFill.style.width = percent + '%';
     if (STATE.islandRefs.currentTime) {
       STATE.islandRefs.currentTime.textContent = formatTime(STATE.audio.currentTime);
     }
-    if (STATE.islandRefs.duration && STATE.audio.duration) {
-      STATE.islandRefs.duration.textContent = formatTime(STATE.audio.duration);
+    if (STATE.islandRefs.duration && dur > 0) {
+      STATE.islandRefs.duration.textContent = formatTime(dur);
     }
   }
 
@@ -3420,12 +3439,13 @@
     // 进度条
     var isAppDraggingProgress = false;
     function appProgressSeek(e) {
-      if (!STATE.audio || !STATE.audio.duration) return;
+      if (!STATE.audio) return;
       var rect = refs.progressBar.getBoundingClientRect();
       var clientX = (e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX);
       var x = clientX - rect.left;
       var percent = Math.max(0, Math.min(1, x / rect.width));
-      seek(percent * STATE.audio.duration);
+      var dur = getSafeDuration();
+      seek(dur > 0 ? percent * dur : 0);
     }
     function onAppProgressStart(e) {
       e.stopPropagation(); e.preventDefault();
@@ -3749,14 +3769,12 @@
   // 更新 App 进度
   function updateAppProgress() {
     if (!STATE.appRefs.progressFill || !STATE.audio) return;
-    var percent = 0;
-    if (STATE.audio.duration) {
-      percent = (STATE.audio.currentTime / STATE.audio.duration) * 100;
-    }
+    var dur = getSafeDuration();
+    var percent = dur > 0 ? (STATE.audio.currentTime / dur) * 100 : 0;
     STATE.appRefs.progressFill.style.width = percent + '%';
     STATE.appRefs.currentTime.textContent = formatTime(STATE.audio.currentTime);
-    if (STATE.audio.duration) {
-      STATE.appRefs.totalTime.textContent = formatTime(STATE.audio.duration);
+    if (dur > 0) {
+      STATE.appRefs.totalTime.textContent = formatTime(dur);
     }
   }
 
