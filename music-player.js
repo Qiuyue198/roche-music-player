@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.15.1';
+  var BUILD_TIME = '2026-07-31-v1.15.2';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -593,10 +593,12 @@
       // 加载歌词（使用 lyricId）
       loadLyrics(song);
       // 异步获取专辑封面
-      // GD音乐台netease源封面URL全部404，需刷新；个人网易云封面直接来自API，有效跳过
+      // GD音乐台netease源封面URL全部404，需刷新（用song.id而非picId，因picId可能是图片URL）
+      // 个人网易云封面直接来自API，有效跳过
       var needCoverRefresh = (song.platform === 'netease' && !song._personal) || (!song.cover && song.picId);
-      if (needCoverRefresh && song.picId) {
-        getPicUrl(song.picId, song.platform || STATE.defaultSource).then(function (picUrl) {
+      var coverLookupId = song.platform === 'netease' ? song.id : song.picId;
+      if (needCoverRefresh && coverLookupId) {
+        getPicUrl(coverLookupId, song.platform || STATE.defaultSource).then(function (picUrl) {
           if (STATE.currentSong !== song) return;
           if (picUrl) {
             song.cover = picUrl;
@@ -3917,7 +3919,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.15.1',
+    version: '1.15.2',
 
     apps: [{
       id: 'roche-music-player-home',

@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.15.1",
-  "description": "音乐播放器，neteaseApi走VPS代理，播放列表恢复为独立页面",
+  "version": "1.15.2",
+  "description": "音乐播放器，播放URL http→https升级，封面修复，播放列表独立Tab",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/yechen1844/roche-music-player/v1.15.1/music-player.js",
+  "entry": "https://raw.githubusercontent.com/yechen1844/roche-music-player/v1.15.2/music-player.js",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
