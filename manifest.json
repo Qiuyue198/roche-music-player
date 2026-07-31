@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.16.9",
-  "description": "修复灵动岛/主面板进度条无法拖拽：流式播放duration为NaN/Infinity，getSafeDuration降级兜底",
+  "version": "1.16.10",
+  "description": "entry切换为jsDelivr CDN分发，解决raw.githubusercontent国内下载失败导致加载旧版JS的问题",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.16.9/music-player.js?v=1.16.9",
+  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@v1.16.10/music-player.js",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
