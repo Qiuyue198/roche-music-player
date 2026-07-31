@@ -2,9 +2,9 @@
   "id": "roche-music-player",
   "name": "音乐播放器",
   "version": "1.15.3",
-  "description": "音乐播放器，manifest entry指向luyi仓库",
+  "description": "音乐播放器，使用版本号query参数绕过CDN缓存",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.15.3/music-player.js",
+  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.15.3/music-player.js?v=1.15.3",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
