@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.16.0",
-  "description": "音乐播放器：网易云风格全面美化，char点歌音源开关，网易云免责声明",
+  "version": "1.16.1",
+  "description": "音乐播放器：免责声明免勾选，默认网易云源，流式播放+URL缓存优化切歌卡顿",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.16.0/music-player.js?v=1.16.0",
+  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.16.1/music-player.js?v=1.16.1",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }

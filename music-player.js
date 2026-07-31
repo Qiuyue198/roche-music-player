@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.16.0';
+  var BUILD_TIME = '2026-07-31-v1.16.1';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -19,7 +19,7 @@
     backend: 'https://456.chajianreader.cc.cd', // 后端地址（CF Worker，网易云直连接口自动转发到Vercel）
     mcpBackend: 'https://ncm.chajianreader.cc.cd', // 网易云 MCP 服务器（HTTPS 直连腾讯云，扫码登录+开放平台API）
     mcpToken: '',             // MCP 服务器 accessToken（扫码登录后获取）
-    defaultSource: 'joox', // 默认音源
+    defaultSource: 'netease', // 默认音源
     quality: 'standard',      // 音质
     // 灵动岛相关
     islandEl: null,
@@ -55,8 +55,8 @@
     lyricsFullInject: false,
     // char 点歌音源：netease（网易云个人）| gd（第三方音乐源）
     charSource: 'netease',
-    // 网易云免责声明是否已同意
-    agreedNeDisclaimer: false,
+    // 网易云播放 URL 缓存（songId -> {url, ts}），避免每次播放都重新请求 /play
+    songUrlCache: {},
     initialized: false
   };
 
@@ -353,6 +353,13 @@
     var cleanId = String(id).indexOf(':') >= 0 ? String(id).split(':').pop() : String(id);
     var br = quality || STATE.quality;
     if (isPersonal && STATE.cookie && (source === 'netease')) {
+      // 播放 URL 缓存：10 分钟内同一首歌直接复用，避免重复请求 /play（VPS weapi 较慢）
+      var cacheKey = 'ne:' + cleanId;
+      var cached = STATE.songUrlCache && STATE.songUrlCache[cacheKey];
+      if (cached && cached.url && (Date.now() - cached.ts < 10 * 60 * 1000)) {
+        console.log('[getSongUrl 个人网易云-weapi] 命中缓存 songId=' + cleanId);
+        return Promise.resolve(cached.url);
+      }
       // weapi 方案（NeteaseCloudMusicApi）：VPS /play 接口返回 weapi_url，
       // weapi 生成的播放 URL 不绑定数据中心 IP（VPS 已验证可拉取 200）
       var playUrl = STATE.mcpBackend.replace(/\/+$/, '') + '/play?id=' + encodeURIComponent(cleanId);
@@ -363,9 +370,10 @@
           console.error('[getSongUrl 个人网易云-weapi] 未返回weapi_url', data);
           return '';
         }
-        // 经 VPS 代理拉取音频流（VPS 已验证可拉 200），前端 fetch→blob 播放
+        // 经 VPS 代理拉取音频流（VPS 已验证可拉 200），前端流式播放
         var url = STATE.mcpBackend.replace(/\/+$/, '') + '/proxy?url=' + encodeURIComponent(weapiUrl);
         console.log('[getSongUrl 个人网易云-weapi] weapi_url=' + weapiUrl + ' proxy=' + url);
+        STATE.songUrlCache[cacheKey] = { url: url, ts: Date.now() };
         return url;
       }).catch(function (e) {
         console.error('[getSongUrl 个人网易云-weapi] 失败', e.message || e);
@@ -631,8 +639,6 @@
   // 播放指定歌曲
   function playSong(song, index) {
     if (!song) return;
-    // 个人网易云歌曲：未同意免责声明时拦截
-    if (song._personal && !requireNeDisclaimer()) return;
     // iOS 未解锁时提示用户先点击解锁
     if (!STATE.audioUnlocked) {
       if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('请先点击播放器任意位置解锁音频');
@@ -664,8 +670,17 @@
       }
       console.log('[playSong] 设置音频源并播放:', url);
       if (song._personal && STATE.cookie) {
-        // 个人网易云：audio 元素无法带 Cookie 头，必须经代理 fetch→blob 播放
-        fetchBlobAndPlay(url, true);
+        // 个人网易云：优先 audio.src 直连流式播放（边下边播，换歌秒出）。
+        // 若失败，onError 会自动回退到 fetch→blob（带 X-Netease-Cookie 头）
+        STATE.audio.src = url;
+        var playPromise = STATE.audio.play();
+        if (playPromise && typeof playPromise.then === 'function') {
+          playPromise.then(function () {
+            console.log('[playSong] 个人网易云 流式播放 resolve 成功');
+          }).catch(function (e) {
+            console.error('[playSong] 个人网易云 play() reject:', e && e.message ? e.message : e);
+          });
+        }
       } else {
         STATE.audio.src = url;
         var playPromise = STATE.audio.play();
@@ -700,9 +715,26 @@
       // 更新所有 UI
       updateSongInfoUI();
       showIsland();
+      // 后台预取下一首播放 URL（列表模式），切歌时命中缓存秒出
+      prefetchNextSongUrl();
     }).catch(function (e) {
       if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('获取播放链接失败');
     });
+  }
+
+  // 预取下一首的播放 URL（仅列表模式的个人网易云歌曲，写入 songUrlCache）
+  function prefetchNextSongUrl() {
+    var list = STATE.playlist;
+    if (!list || list.length === 0 || STATE.currentIndex < 0) return;
+    if (STATE.playMode === 'random') return; // 随机模式下一首不确定
+    var nextIdx = STATE.currentIndex + 1;
+    if (nextIdx >= list.length) nextIdx = 0;
+    var next = list[nextIdx];
+    if (!next || !(next._personal && STATE.cookie)) return;
+    var cleanId = String(next.id).indexOf(':') >= 0 ? String(next.id).split(':').pop() : String(next.id);
+    var key = 'ne:' + cleanId;
+    if (STATE.songUrlCache && STATE.songUrlCache[key]) return; // 已缓存
+    getSongUrl(cleanId, 'netease', undefined, true).catch(function () {});
   }
 
   // 加载歌词（使用 lyricId，一般与 track_id 相同）
@@ -2405,22 +2437,6 @@
   border-radius: 8px;\
   background: rgba(194,12,12,0.06);\
 }\
-.rmp-ne-agree-row {\
-  display: flex;\
-  align-items: center;\
-  gap: 8px;\
-  margin-top: 10px;\
-  font-size: 12px;\
-  color: rgba(255,255,255,0.75);\
-  cursor: pointer;\
-}\
-.rmp-ne-agree-check {\
-  width: 16px;\
-  height: 16px;\
-  accent-color: #C20C0C;\
-  cursor: pointer;\
-  flex-shrink: 0;\
-}\
 .rmp-disclaimer-title {\
   font-size: 11px;\
   font-weight: 600;\
@@ -2822,8 +2838,8 @@
         <input type="text" class="rmp-search-input rmp-gd-search-input" placeholder="输入歌曲名或歌手名..." />\
         <select class="rmp-select rmp-search-source">\
           <option value="all">全平台</option>\
-          <option value="joox">JOOX</option>\
           <option value="netease">网易云</option>\
+          <option value="joox">JOOX</option>\
         </select>\
         <button class="rmp-btn rmp-gd-search-btn">搜索</button>\
       </div>\
@@ -2906,12 +2922,8 @@
           <div class="rmp-disclaimer-body">\
             网易云音乐相关功能使用你本人提供的 Cookie 登录态，仅用于查询歌曲、歌单与播放音频。<br/>\
             播放链接来自网易云官方接口，仅供个人学习与技术研究，请勿用于商业用途。<br/>\
-            未同意前，网易云搜索、推荐、歌单与播放功能不可用。\
+            使用即视为同意以上声明。\
           </div>\
-          <label class="rmp-ne-agree-row">\
-            <input type="checkbox" class="rmp-ne-agree-check" />\
-            <span>我已阅读并同意以上网易云免责声明</span>\
-          </label>\
         </div>\
         <div class="rmp-disclaimer">\
           <div class="rmp-disclaimer-title">免责声明</div>\
@@ -2989,9 +3001,8 @@
       resetIslandBtn: root.querySelector('.rmp-reset-island-btn'),
       lyricsFullToggle: root.querySelector('.rmp-lyrics-full-toggle'),
       closeBtn: root.querySelector('.rmp-close-btn'),
-      // 设置 — char 点歌音源 & 网易云免责声明
-      charSourceSelect: root.querySelector('.rmp-char-source-select'),
-      neAgreeCheck: root.querySelector('.rmp-ne-agree-check')
+      // 设置 — char 点歌音源
+      charSourceSelect: root.querySelector('.rmp-char-source-select')
     };
 
     // 初始化设置值
@@ -3001,7 +3012,8 @@
     STATE.appRefs.volumeSlider.value = STATE.volume;
     STATE.appRefs.islandTopInput.value = STATE.islandTop;
     if (STATE.appRefs.charSourceSelect) STATE.appRefs.charSourceSelect.value = STATE.charSource;
-    if (STATE.appRefs.neAgreeCheck) STATE.appRefs.neAgreeCheck.checked = !!STATE.agreedNeDisclaimer;
+    // 第三方面板搜索源默认跟随默认音源（默认网易云）
+    if (STATE.appRefs.gdSearchSource) STATE.appRefs.gdSearchSource.value = STATE.defaultSource;
     STATE.appRefs.islandScrollModeSelect.value = STATE.islandScrollMode;
     // 初始化开关状态
     if (STATE.islandVisible) STATE.appRefs.islandVisibleToggle.classList.add('on');
@@ -3361,18 +3373,7 @@
       STATE.appCleanups.push(function () { refs.charSourceSelect.removeEventListener('change', onCharSourceChange); });
     }
 
-    // ===== 网易云免责声明勾选 =====
-    function onNeAgreeChange() {
-      STATE.agreedNeDisclaimer = refs.neAgreeCheck.checked;
-      saveSettings();
-      if (STATE.roche && STATE.roche.ui && STATE.agreedNeDisclaimer) {
-        STATE.roche.ui.toast('已同意网易云免责声明');
-      }
-    }
-    if (refs.neAgreeCheck) {
-      refs.neAgreeCheck.addEventListener('change', onNeAgreeChange);
-      STATE.appCleanups.push(function () { refs.neAgreeCheck.removeEventListener('change', onNeAgreeChange); });
-    }
+    // ===== 网易云免责声明（纯展示，无勾选交互） =====
   }
 
   // 切换标签页
@@ -3384,14 +3385,6 @@
     STATE.appRefs.panels.forEach(function (panel) {
       panel.classList.toggle('active', panel.getAttribute('data-panel') === tabName);
     });
-  }
-
-  // 网易云免责声明拦截：未同意时提示并跳转设置页
-  function requireNeDisclaimer() {
-    if (STATE.agreedNeDisclaimer) return true;
-    if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('请先在设置中同意网易云免责声明');
-    switchTab('settings');
-    return false;
   }
 
   // 渲染搜索结果
@@ -3764,7 +3757,6 @@
   function loadUserPlaylists() {
     var refs = STATE.appRefs;
     if (!refs.nePlaylists) return;
-    if (!requireNeDisclaimer()) return;
     if (!STATE.cookie) {
       refs.nePlaylists.innerHTML = '<div class="rmp-empty-state">请先在设置中填写网易云 Cookie</div>';
       return;
@@ -3811,7 +3803,6 @@
   // 加载歌单歌曲
   function loadPlaylistSongs(plId) {
     var refs = STATE.appRefs;
-    if (!requireNeDisclaimer()) return;
     if (!STATE.cookie) {
       refs.neSearchResults.innerHTML = '<div class="rmp-empty-state">请先设置Cookie</div>';
       return;
@@ -4023,7 +4014,6 @@
       STATE.roche.storage.set('rmp_lyrics_full_inject', STATE.lyricsFullInject ? '1' : '0');
       STATE.roche.storage.set('rmp_agreed_disclaimer', '1');
       STATE.roche.storage.set('rmp_char_source', STATE.charSource);
-      STATE.roche.storage.set('rmp_agreed_ne_disclaimer', STATE.agreedNeDisclaimer ? '1' : '0');
       if (STATE.cookie) STATE.roche.storage.set('rmp_cookie', STATE.cookie);
       if (STATE.mcpToken) STATE.roche.storage.set('rmp_mcp_token', STATE.mcpToken);
       if (STATE.userProfile) STATE.roche.storage.set('rmp_user_profile', JSON.stringify(STATE.userProfile));
@@ -4049,8 +4039,7 @@
       roche.storage.get('rmp_extended_sources'),
       roche.storage.get('rmp_lyrics_full_inject'),
       roche.storage.get('rmp_mcp_token'),
-      roche.storage.get('rmp_char_source'),
-      roche.storage.get('rmp_agreed_ne_disclaimer')
+      roche.storage.get('rmp_char_source')
     ]).then(function (results) {
       if (results[0]) STATE.backend = results[0];
       if (results[1]) STATE.defaultSource = results[1];
@@ -4087,10 +4076,6 @@
       if (results[14]) STATE.mcpToken = results[14];
       // char 点歌音源
       if (results[15] === 'netease' || results[15] === 'gd') STATE.charSource = results[15];
-      // 网易云免责声明
-      if (results[16] !== null && results[16] !== undefined && results[16] !== '') {
-        STATE.agreedNeDisclaimer = results[16] === '1';
-      }
     }).catch(function () {});
   }
 
@@ -4226,8 +4211,14 @@
               return Promise.resolve({ success: false, message: '请先在设置中同意网易云免责声明' });
             }
             // 用用户自己的网易云账号搜索（走 VPS 代理）
-            return neteaseApi('/api/search/get?s=' + encodeURIComponent(keyword) + '&type=1&limit=' + limit).then(function (resp) {
-              var result = resp && resp.result ? resp.result : {};
+            // 网易云搜索加超时（12 秒），避免 VPS 慢导致 char 长时间等待
+            var searchPromise = neteaseApi('/api/search/get?s=' + encodeURIComponent(keyword) + '&type=1&limit=' + limit);
+            var timeoutPromise = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 12000); });
+            return Promise.race([searchPromise, timeoutPromise]).then(function (resp) {
+              if (!resp) {
+                return { success: false, message: '网易云搜索超时，请稍后重试或切换第三方音乐源' };
+              }
+              var result = resp.result ? resp.result : {};
               var songs = (result.songs || []).map(function (s) {
                 var al = s.album || s.al || {};
                 var ar = s.artists || s.ar || [];
@@ -4249,14 +4240,14 @@
             });
           }
           // 模式 B：第三方音乐源（GD，netease → joox 降级重试）
-          // 带重试的搜索（后端不稳定，最多重试 5 次，间隔递增）
+          // 带重试的搜索（快速重试 2 次，避免 char 等待过久；全部失败后降级 joox）
           function searchWithRetry(src, kw, lim, retries, delay) {
             retries = retries || 0;
-            delay = delay || 800;
+            delay = delay || 300;
             return searchMusic(kw, src, lim).then(function (results) {
-              if ((!results || results.length === 0) && retries < 5) {
+              if ((!results || results.length === 0) && retries < 2) {
                 return new Promise(function (resolve) { setTimeout(resolve, delay); })
-                  .then(function () { return searchWithRetry(src, kw, lim, retries + 1, delay + 400); });
+                  .then(function () { return searchWithRetry(src, kw, lim, retries + 1, delay + 200); });
               }
               return results || [];
             });
