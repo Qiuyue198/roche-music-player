@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-30-v1.9.1';
+  var BUILD_TIME = '2026-07-31-v1.10.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -16,7 +16,9 @@
     tlyrics: [],              // 解析后的翻译歌词 [{time, text}]
     currentLyricIndex: -1,    // 当前歌词行索引
     cookie: '',               // 网易云 cookie
-    backend: 'https://vercel.chajianreader.cc.cd', // 后端地址（Vercel）
+    backend: 'https://456.chajianreader.cc.cd', // 后端地址（CF Worker，网易云直连接口自动转发到Vercel）
+    mcpBackend: 'http://43.128.227.97:8080', // 网易云 MCP 服务器（扫码登录+开放平台API）
+    mcpToken: '',             // MCP 服务器 accessToken（扫码登录后获取）
     defaultSource: 'joox', // 默认音源
     quality: 'standard',      // 音质
     // 灵动岛相关
@@ -265,22 +267,41 @@
     });
   }
 
-  // 过滤不可播放/无歌词歌曲：并发检查歌词和播放链接，只保留两者都有的
+  // 判断是否纯音乐（按歌名关键词）：纯音乐无需歌词即可播放
+  function isInstrumental(name) {
+    if (!name) return false;
+    var n = String(name).toLowerCase();
+    return /纯音乐|伴奏|instrumental|piano|钢琴曲|钢琴独奏|bgm|ost|原声|pure\s*music|acappella|阿卡贝拉/.test(n);
+  }
+
+  // 过滤不可播放/无歌词歌曲
+  // netease 源：搜索到基本都能播放，跳过预查询，直接保留（仅标记纯音乐）
+  // joox 源：并发检查歌词和播放链接；普通歌曲需两者都有，纯音乐仅需播放链接
   // 排序：netease 优先于 joox
   function filterPlayable(songs) {
     if (!songs || songs.length === 0) return Promise.resolve([]);
     var checks = songs.map(function (song) {
-      var lyricId = song.lyricId || song.id;
       var source = song.platform || 'joox';
+      var instrumental = isInstrumental(song.name);
+      // netease 源跳过预查询，直接保留
+      if (source === 'netease') {
+        song._hasLyric = true;
+        song._hasUrl = true;
+        song._isInstrumental = instrumental;
+        song._playable = true;
+        return Promise.resolve(song);
+      }
+      var lyricId = song.lyricId || song.id;
       var cleanId = String(song.id).indexOf(':') >= 0 ? String(song.id).split(':').pop() : String(song.id);
-      // 并发检查歌词和播放链接
+      // joox 源并发检查歌词和播放链接
       return Promise.all([
         getLyric(lyricId, source).then(function (d) { return d.lyric && d.lyric.trim().length > 10; }).catch(function () { return false; }),
         getSongUrl(cleanId, source).then(function (url) { return !!url; }).catch(function () { return false; })
       ]).then(function (r) {
         song._hasLyric = r[0];
         song._hasUrl = r[1];
-        song._playable = r[0] && r[1];
+        song._isInstrumental = instrumental;
+        song._playable = instrumental ? r[1] : (r[0] && r[1]);
         return song;
       });
     });
@@ -291,7 +312,10 @@
         if (a.platform !== 'netease' && b.platform === 'netease') return 1;
         return 0;
       });
-      playable.forEach(function (s) { delete s._hasLyric; delete s._hasUrl; delete s._playable; });
+      playable.forEach(function (s) {
+        s.instrumental = s._isInstrumental; // 保留标记，供歌词区显示「纯音乐」
+        delete s._hasLyric; delete s._hasUrl; delete s._playable; delete s._isInstrumental;
+      });
       return playable;
     }
     return Promise.allSettled ? Promise.allSettled(checks).then(function (results) {
@@ -380,13 +404,25 @@
   }
 
   // 获取网易云扫码登录二维码（通过 CF Worker 后端，避免 CORS）
+  // MCP 服务器 API 调用（扫码登录 + 开放平台）
+  function mcpApi(endpoint, params) {
+    params = params || {};
+    var url = STATE.mcpBackend.replace(/\/+$/, '') + '/' + endpoint.replace(/^\/+/, '');
+    var qs = [];
+    Object.keys(params).forEach(function(k) {
+      qs.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
+    });
+    if (qs.length > 0) url += '?' + qs.join('&');
+    return fetch(url).then(function(r) { return r.json(); });
+  }
+
   function getQrLogin() {
-    return api('netease_qr_login', {});
+    return mcpApi('login/start');
   }
 
   // 检查扫码状态
   function checkQrLogin(key) {
-    return api('netease_qr_check', { key: key });
+    return mcpApi('login/check');
   }
 
   // ==================== 音频引擎 ====================
@@ -3159,7 +3195,9 @@
   function updateLoginUI() {
     var refs = STATE.appRefs;
     if (!refs.loginNotLogged) return;
-    if (STATE.cookie && STATE.userProfile) {
+    var hasCookieLogin = STATE.cookie && STATE.userProfile;
+    var hasMcpLogin = STATE.mcpToken && STATE.userProfile;
+    if (hasCookieLogin || hasMcpLogin) {
       // 已登录状态
       refs.loginNotLogged.style.display = 'none';
       refs.loginLogged.style.display = '';
@@ -3169,7 +3207,7 @@
         refs.userBadge.textContent = 'VIP会员';
         refs.userBadge.className = 'rmp-user-badge vip';
       } else {
-        refs.userBadge.textContent = '网易云音乐用户';
+        refs.userBadge.textContent = hasMcpLogin ? '扫码已登录' : '网易云音乐用户';
         refs.userBadge.className = 'rmp-user-badge';
       }
       refs.loginStatus.textContent = '已登录';
@@ -3186,13 +3224,14 @@
   // 退出登录
   function doLogout() {
     STATE.cookie = '';
+    STATE.mcpToken = '';
     STATE.userProfile = null;
     saveSettings();
     updateLoginUI();
     if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('已退出网易云登录');
   }
 
-  // 网易云扫码登录
+  // 网易云扫码登录（通过 MCP 服务器）
   function startQrLogin() {
     var refs = STATE.appRefs;
     refs.qrImg.style.display = 'none';
@@ -3208,66 +3247,59 @@
     }
 
     getQrLogin().then(function (data) {
-      if (!data || !data.unikey) {
+      if (!data || !data.qr_url) {
         refs.qrPlaceholder.textContent = '获取二维码失败';
-        refs.loginStatus.textContent = '获取二维码失败，请检查网络';
+        refs.loginStatus.textContent = data && data.raw && data.raw.message ? data.raw.message : '获取二维码失败，请检查网络';
         refs.loginStatus.className = 'rmp-login-status error';
         return;
       }
-      var key = data.unikey;
-      if (data.qrimg) {
-        refs.qrImg.src = data.qrimg;
-        refs.qrImg.style.display = 'block';
-        refs.qrPlaceholder.style.display = 'none';
-      }
-      refs.loginStatus.textContent = '请使用网易云音乐 APP扫码';
+      var qrUrl = data.qr_url;
+      // 用 qrserver 生成 QR 码图片
+      var qrImgSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(qrUrl);
+      refs.qrImg.src = qrImgSrc;
+      refs.qrImg.style.display = 'block';
+      refs.qrPlaceholder.style.display = 'none';
+      // 同时显示可点击链接
+      refs.loginStatus.innerHTML = '请用<strong>网易云音乐 APP</strong>扫码<br><a href="' + qrUrl + '" target="_blank" style="color:#6cf;">手机上打不开？点此链接</a>';
       refs.loginStatus.className = 'rmp-login-status';
 
       STATE.qrPollTimer = setInterval(function () {
-        checkQrLogin(key).then(function (result) {
+        checkQrLogin().then(function (result) {
           if (!result) return;
-          switch (result.code) {
-            case 800:
+          if (result.logged_in) {
+            // 登录成功
+            refs.loginStatus.textContent = '登录成功！';
+            refs.loginStatus.className = 'rmp-login-status success';
+            if (result.access_token) {
+              STATE.mcpToken = result.access_token;
+              saveSettings();
+            }
+            if (result.user_info && result.user_info.nickname) {
+              STATE.userProfile = result.user_info;
+              STATE.roche.storage.set('rmp_user_profile', JSON.stringify(result.user_info));
+              updateLoginUI();
+              if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功：' + result.user_info.nickname);
+            } else {
+              updateLoginUI();
+              if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功');
+            }
+            clearInterval(STATE.qrPollTimer);
+            STATE.qrPollTimer = null;
+          } else {
+            // 检查 raw 数据中的错误码
+            var raw = result.raw || {};
+            if (raw.code === 800) {
               refs.loginStatus.textContent = '二维码已过期，请重新获取';
               refs.loginStatus.className = 'rmp-login-status error';
               clearInterval(STATE.qrPollTimer);
               STATE.qrPollTimer = null;
-              break;
-            case 801:
-              refs.loginStatus.textContent = '等待扫码...';
-              refs.loginStatus.className = 'rmp-login-status';
-              break;
-            case 802:
+            } else if (raw.code === 802) {
               refs.loginStatus.textContent = '待确认，请在手机上点击确认登录';
               refs.loginStatus.className = 'rmp-login-status';
-              break;
-            default:
-              refs.loginStatus.textContent = '状态: ' + (result.code || '?') + ' ' + (result.message || '');
+            } else {
+              refs.loginStatus.textContent = '请使用网易云音乐 APP扫码';
               refs.loginStatus.className = 'rmp-login-status';
-              break;
-            case 803:
-              refs.loginStatus.textContent = '登录成功！';
-              refs.loginStatus.className = 'rmp-login-status success';
-              if (result.cookie) {
-                STATE.cookie = result.cookie;
-                saveSettings();
-              }
-              // 直连无法获取 profile，用 Vercel 代理获取用户信息
-              if (result.cookie) {
-                fetchUserInfo().then(function (profile) {
-                  updateLoginUI();
-                  if (profile) {
-                    if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功：' + profile.nickname);
-                  } else {
-                    if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功');
-                  }
-                });
-              } else {
-                if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功');
-              }
-              clearInterval(STATE.qrPollTimer);
-              STATE.qrPollTimer = null;
-              break;
+            }
           }
         }).catch(function () {
           // 忽略轮询错误
@@ -3338,6 +3370,7 @@
       STATE.roche.storage.set('rmp_lyrics_full_inject', STATE.lyricsFullInject ? '1' : '0');
       STATE.roche.storage.set('rmp_agreed_disclaimer', '1');
       if (STATE.cookie) STATE.roche.storage.set('rmp_cookie', STATE.cookie);
+      if (STATE.mcpToken) STATE.roche.storage.set('rmp_mcp_token', STATE.mcpToken);
       if (STATE.userProfile) STATE.roche.storage.set('rmp_user_profile', JSON.stringify(STATE.userProfile));
     } catch (e) {}
   }
@@ -3359,7 +3392,8 @@
       roche.storage.get('rmp_playlist'),
       roche.storage.get('rmp_agreed_disclaimer'),
       roche.storage.get('rmp_extended_sources'),
-      roche.storage.get('rmp_lyrics_full_inject')
+      roche.storage.get('rmp_lyrics_full_inject'),
+      roche.storage.get('rmp_mcp_token')
     ]).then(function (results) {
       if (results[0]) STATE.backend = results[0];
       if (results[1]) STATE.defaultSource = results[1];
@@ -3392,6 +3426,8 @@
       if (results[13] !== null && results[13] !== undefined && results[13] !== '') {
         STATE.lyricsFullInject = results[13] === '1';
       }
+      // MCP 登录 token
+      if (results[14]) STATE.mcpToken = results[14];
     }).catch(function () {});
   }
 
@@ -3501,7 +3537,7 @@
           var artist = String((args && args.artist) || '');
           if (!songName) return Promise.resolve({ error: 'missing song name' });
           var keyword = artist ? (songName + ' ' + artist) : songName;
-          // char 搜索：仅搜索网易云（JOOX 播放不稳定）
+          // char 搜索：优先网易云，失败后降级到 joox
           var searchSource = 'netease';
           var limit = 10;
           // 带重试的搜索（CF Worker 不稳定，最多重试 5 次，间隔递增）
@@ -3516,7 +3552,16 @@
               return results || [];
             });
           }
-          return searchWithRetry(searchSource, keyword, limit).then(function (results) {
+          // netease 重试全部失败后降级到 joox
+          function searchWithFallback(src, kw, lim) {
+            return searchWithRetry(src, kw, lim).then(function (results) {
+              if ((!results || results.length === 0) && src === 'netease') {
+                return searchWithRetry('joox', kw, lim);
+              }
+              return results || [];
+            });
+          }
+          return searchWithFallback(searchSource, keyword, limit).then(function (results) {
             if (!results || results.length === 0) {
               return { success: false, message: '未找到歌曲：' + songName };
             }
@@ -3530,7 +3575,7 @@
             // 添加到播放列表（addToPlaylist 去重 + 刷新UI + 持久化）
             var idx = addToPlaylist(best);
             playSong(best, idx);
-            return { success: true, song: best.name, artist: best.artist, platform: best.platform };
+            return { success: true, song: best.name, artist: best.artist, platform: best.platform, instrumental: !!best.instrumental };
           }).catch(function (e) {
             return { success: false, message: e.message };
           });
