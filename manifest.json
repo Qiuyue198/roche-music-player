@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.16.6",
-  "description": "修复register写死的1.15.13版本号，改为BUILD_TIME动态读取",
+  "version": "1.16.7",
+  "description": "修复GD音乐库joox/netease源搜索列表封面：picId为图片ID非URL，异步补拉真实封面",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.16.6/music-player.js?v=1.16.6",
+  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.16.7/music-player.js?v=1.16.7",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }

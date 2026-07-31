@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.16.6';
+  var BUILD_TIME = '2026-07-31-v1.16.7';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -137,6 +137,12 @@
     url = String(url);
     if (url.indexOf('http://') === 0) url = 'https://' + url.substring(7);
     return url;
+  }
+  // 判断是否为完整资源 URL（避免把 picId 等纯ID直接当 img src）
+  function isFullUrl(url) {
+    if (!url) return false;
+    url = String(url);
+    return url.indexOf('http://') === 0 || url.indexOf('https://') === 0 || url.indexOf('//') === 0;
   }
 
   // 获取翻译歌词文本（按时间匹配）
@@ -471,6 +477,50 @@
       }
       return '';
     }).catch(function () { return ''; });
+  }
+
+  // 通过 GD pic 接口把图片ID转成真实封面URL
+  // 网易云图片ID → p2.music.126.net/{picId}.jpg（实测200），joox → image.joox.com（实测200）
+  // 注意：仅接受图片ID（搜索接口返回的 picId），不要传歌曲ID（GD pic 按歌曲ID拼出的URL是404）
+  function fetchPicByPicId(picId, platform) {
+    if (!picId) return Promise.resolve('');
+    var cleanId = String(picId).indexOf(':') >= 0 ? String(picId).split(':').pop() : String(picId);
+    return api('pic', { id: cleanId, source: platform || 'joox' }).then(function (data) {
+      var u = data.url || '';
+      return isFullUrl(u) ? toHttps(u) : '';
+    }).catch(function () { return ''; });
+  }
+
+  // 搜索结果渲染后：为没有完整封面的歌曲异步补封面（picId → 真实URL）
+  // 拉到后写入 song.cover 缓存，避免列表重渲染时重复请求
+  function hydrateSearchCovers(container, songs) {
+    if (!container || !songs || songs.length === 0) return;
+    var items = container.querySelectorAll('.rmp-song-item');
+    for (var i = 0; i < songs.length; i++) {
+      (function (idx) {
+        var song = songs[idx];
+        if (isFullUrl(song.cover) || isFullUrl(song.picId)) return; // 已有完整URL
+        var picId = song.picId || song.id;
+        if (!picId) return;
+        fetchPicByPicId(picId, song.platform || 'joox').then(function (url) {
+          if (!url || !STATE.searchResults || STATE.searchResults[idx] !== song) return; // 列表已变化，放弃
+          song.cover = url;
+          var item = items[idx];
+          if (!item || !item.isConnected) return;
+          var holder = item.querySelector('.rmp-song-cover');
+          if (!holder) return;
+          if (holder.tagName === 'IMG') {
+            holder.src = url;
+          } else {
+            var img = document.createElement('img');
+            img.className = 'rmp-song-cover';
+            img.src = url;
+            img.alt = '';
+            holder.replaceWith(img);
+          }
+        }).catch(function () {});
+      })(i);
+    }
   }
 
   // 获取歌词（统一走 Vercel 后端）
@@ -3588,7 +3638,7 @@
     var html = '';
     for (var i = 0; i < songs.length; i++) {
       var s = songs[i];
-      var cover = s.cover || s.picId || '';
+      var cover = isFullUrl(s.cover) ? s.cover : (isFullUrl(s.picId) ? s.picId : '');
       if (cover && cover.indexOf('//') === 0) cover = 'https:' + cover;
       var duration = s.duration ? formatTime(s.duration) : '';
       var artistName = s.artist || (s.ar ? s.ar.map(function (a) { return a.name; }).join(' / ') : '');
@@ -3607,6 +3657,8 @@
       html += '</div>';
     }
     refs.neSearchResults.innerHTML = html;
+    // GD搜索返回的cover为空、picId为图片ID，需异步补拉真实封面URL
+    hydrateSearchCovers(refs.neSearchResults, songs);
   }
 
   // 渲染 GD 音乐台搜索结果
@@ -3621,7 +3673,7 @@
     var html = '';
     for (var i = 0; i < songs.length; i++) {
       var s = songs[i];
-      var cover = s.cover || s.picId || '';
+      var cover = isFullUrl(s.cover) ? s.cover : (isFullUrl(s.picId) ? s.picId : '');
       if (cover && cover.indexOf('//') === 0) cover = 'https:' + cover;
       var duration = s.duration ? formatTime(s.duration) : '';
       var artistName = s.artist || '';
@@ -3641,6 +3693,8 @@
       html += '</div>';
     }
     refs.gdSearchResults.innerHTML = html;
+    // GD搜索返回的cover为空、picId为图片ID，需异步补拉真实封面URL
+    hydrateSearchCovers(refs.gdSearchResults, songs);
   }
 
   // 更新 App 播放状态
