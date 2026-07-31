@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.15.3';
+  var BUILD_TIME = '2026-07-31-v1.15.5';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -513,10 +513,52 @@
         return;
       }
       audioRetryCount = 0;
+      // 直接 URL 加载失败：尝试 fetch→blob 备用播放（诊断 CDN 返回内容 + 绕过混合内容限制）
+      if (song && STATE.audio.src && !STATE._blobFallbackTried) {
+        STATE._blobFallbackTried = true;
+        fetchBlobAndPlay(STATE.audio.src);
+        return;
+      }
       if (STATE.roche && STATE.roche.ui) {
         STATE.roche.ui.toast('播放出错，请尝试其他歌曲或音源');
       }
       updatePlayStateUI();
+    }
+
+    // fetch 音频为 blob 后播放（诊断+备用方案）
+    function fetchBlobAndPlay(src) {
+      if (!src) return;
+      console.log('[audio] 尝试 fetch→blob 播放:', src);
+      fetch(src).then(function (r) {
+        console.log('[audio] fetch 状态:', r.status, 'content-type:', r.headers.get('content-type'), 'content-length:', r.headers.get('content-length'));
+        if (!r.ok) {
+          console.error('[audio] fetch 非2xx:', r.status);
+          if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('音频源返回 ' + r.status + '，无法播放');
+          return;
+        }
+        return r.blob().then(function (blob) {
+          console.log('[audio] blob 大小:', blob.size, 'type:', blob.type);
+          if (!blob.size) {
+            if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('音频为空，链接可能已过期');
+            return;
+          }
+          var objUrl = URL.createObjectURL(blob);
+          STATE.audio.src = objUrl;
+          var p = STATE.audio.play();
+          if (p && typeof p.then === 'function') {
+            p.then(function () {
+              console.log('[audio] blob 播放成功');
+              if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('已通过备用方式播放');
+            }).catch(function (e) {
+              console.error('[audio] blob 播放失败:', e.message || e);
+              if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('播放失败: ' + (e.message || '未知'));
+            });
+          }
+        });
+      }).catch(function (e) {
+        console.error('[audio] fetch 失败:', e.message || e);
+        if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('音频获取失败');
+      });
     }
 
     STATE.audio.addEventListener('play', onPlay);
@@ -567,6 +609,7 @@
     if (typeof index === 'number') {
       STATE.currentIndex = index;
     }
+    STATE._blobFallbackTried = false;
     STATE.lyrics = [];
     STATE.tlyrics = [];
     STATE.currentLyricIndex = -1;
@@ -3929,7 +3972,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.15.4',
+    version: '1.15.5',
 
     apps: [{
       id: 'roche-music-player-home',
