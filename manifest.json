@@ -1,8 +1,8 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.14.0",
-  "description": "音乐播放器，网易云直连官方API，彻底剥离GD后端",
+  "version": "1.15.0",
+  "description": "音乐播放器，GD与网易云彻底分离，_personal标记分流",
   "author": "Roche",
   "entry": "https://raw.githubusercontent.com/yechen1844/roche-music-player/v1.15.0/music-player.js",
   "hash": "",
