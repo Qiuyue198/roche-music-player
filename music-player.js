@@ -126,26 +126,26 @@
     return fetch(url, { headers: headers }).then(function (res) { return res.json(); });
   }
 
-  // 网易云直连 API（直接调用 music.163.com，不走 GD 后端）
-  function neteaseApi(url, data, method) {
+  // 网易云 API（通过 VPS 代理，避免 CORS）
+  function neteaseApi(path, data, method) {
     method = method || 'GET';
-    var headers = {
-      'Cookie': STATE.cookie
+    var fullUrl = 'https://music.163.com' + path;
+    var proxyUrl = STATE.mcpBackend.replace(/\/+$/, '') + '/proxy?url=' + encodeURIComponent(fullUrl);
+    var fetchOpts = {
+      method: method,
+      headers: { 'X-Netease-Cookie': STATE.cookie }
     };
-    var body = null;
-    if (data) {
+    if (data && method === 'POST') {
       if (typeof data === 'object') {
-        body = Object.keys(data).map(function(k) {
-          return encodeURIComponent(k) + '=' + encodeURIComponent(data[k]);
-        }).join('&');
+        var pairs = [];
+        Object.keys(data).forEach(function(k) { pairs.push(encodeURIComponent(k) + '=' + encodeURIComponent(data[k])); });
+        fetchOpts.body = pairs.join('&');
       } else {
-        body = String(data);
+        fetchOpts.body = String(data);
       }
-      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      fetchOpts.headers['Content-Type'] = 'application/x-www-form-urlencoded';
     }
-    return fetch('https://music.163.com' + url, {
-      method: method, headers: headers, body: body
-    }).then(function(r) { return r.json(); });
+    return fetch(proxyUrl, fetchOpts).then(function(r) { return r.json(); });
   }
   
   // 从 Cookie 提取 __csrf
@@ -2659,6 +2659,13 @@
         <button class="rmp-btn rmp-gd-search-btn">搜索</button>\
       </div>\
       <div class="rmp-search-results rmp-gd-results"></div>\
+      <div class="rmp-playlist-section" style="margin-top:12px;">\
+        <div class="rmp-playlist-header">\
+          <span class="rmp-playlist-count">0 首</span>\
+          <button class="rmp-clear-btn rmp-clear-playlist-btn">清空列表</button>\
+        </div>\
+        <div class="rmp-playlist-items"></div>\
+      </div>\
     </div>\
     <!-- ===== 设置面板 ===== -->\
     <div class="rmp-panel" data-panel="settings">\
@@ -2759,6 +2766,10 @@
       gdSearchSource: root.querySelector('.rmp-search-source'),
       gdSearchBtn: root.querySelector('.rmp-gd-search-btn'),
       gdSearchResults: root.querySelector('.rmp-gd-results'),
+      // 播放列表（GD Tab 内）
+      playlistCount: root.querySelector('.rmp-playlist-count'),
+      playlistItems: root.querySelector('.rmp-playlist-items'),
+      clearPlaylistBtn: root.querySelector('.rmp-clear-playlist-btn'),
       // 播放器（共享）
       npCover: root.querySelector('.rmp-np-cover'),
       npTitle: root.querySelector('.rmp-np-title'),
@@ -2982,6 +2993,27 @@
       }
       refs.gdSearchResults.addEventListener('click', onGdResultsClick);
       STATE.appCleanups.push(function () { refs.gdSearchResults.removeEventListener('click', onGdResultsClick); });
+    }
+
+    // ===== 播放列表事件（GD Tab 内） =====
+    function onPlaylistClick(e) {
+      var item = e.target.closest('.rmp-song-item');
+      if (!item) return;
+      var index = parseInt(item.getAttribute('data-index'), 10);
+      if (isNaN(index)) return;
+      if (e.target.closest('.rmp-remove-btn')) {
+        removeFromPlaylist(index);
+        return;
+      }
+      if (STATE.playlist[index]) { playSong(STATE.playlist[index], index); }
+    }
+    if (refs.playlistItems) {
+      refs.playlistItems.addEventListener('click', onPlaylistClick);
+      STATE.appCleanups.push(function () { refs.playlistItems.removeEventListener('click', onPlaylistClick); });
+    }
+    if (refs.clearPlaylistBtn) {
+      refs.clearPlaylistBtn.addEventListener('click', clearPlaylist);
+      STATE.appCleanups.push(function () { refs.clearPlaylistBtn.removeEventListener('click', clearPlaylist); });
     }
 
     // ===== 播放控件 =====
