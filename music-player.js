@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.16.4';
+  var BUILD_TIME = '2026-07-31-v1.16.5';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -2567,11 +2567,21 @@
   box-shadow: 0 3px 10px rgba(194,12,12,0.45);\
 }\
 .rmp-brand-mark svg { width: 15px; height: 15px; fill: #fff; }\
+.rmp-brand-text {\
+  display: flex;\
+  flex-direction: column;\
+  line-height: 1.15;\
+}\
 .rmp-brand-name {\
   font-size: 13px;\
   font-weight: 700;\
   color: #fff;\
   letter-spacing: 0.5px;\
+}\
+.rmp-brand-ver {\
+  font-size: 9px;\
+  color: rgba(255,255,255,0.45);\
+  font-family: Consolas, Menlo, monospace;\
 }\
 .rmp-close-btn {\
   flex-shrink: 0;\
@@ -2824,6 +2834,13 @@
     container.innerHTML = '\
 <div class="roche-music-player">\
   <div class="rmp-topbar">\
+    <div class="rmp-brand">\
+      <div class="rmp-brand-mark"><svg viewBox="0 0 24 24"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg></div>\
+      <div class="rmp-brand-text">\
+        <span class="rmp-brand-name">云音乐</span>\
+        <span class="rmp-brand-ver">' + BUILD_TIME.split('-v')[1] + '</span>\
+      </div>\
+    </div>\
     <div class="rmp-tabs">\
       <button class="rmp-tab active" data-tab="netease">网易云音乐</button>\
       <button class="rmp-tab" data-tab="gd">第三方音乐源</button>\

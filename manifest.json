@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.16.4",
-  "description": "音乐播放器：修复requireNeDisclaimer残留引用导致搜索/推荐/char点歌报错中断",
+  "version": "1.16.5",
+  "description": "音乐播放器：恢复品牌logo HTML+顶部版本徽章，残留引用清零",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.16.4/music-player.js?v=1.16.4",
+  "entry": "https://raw.githubusercontent.com/luyi90720-sys/roche-music-player/v1.16.5/music-player.js?v=1.16.5",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
