@@ -42,7 +42,7 @@
     backend: 'https://456.chajianreader.cc.cd', // 后端地址（CF Worker，网易云直连接口自动转发到Vercel）
     mcpBackend: 'https://ncm.chajianreader.cc.cd', // 网易云 MCP 服务器（HTTPS 直连腾讯云，扫码登录+开放平台API）
     // 自部署网易云 API 地址（NeteaseCloudMusicApi 兼容实例，如 https://xxx.vercel.app）
-    // 填了之后网易云个人功能全部走使用者自己的实例，Cookie 不经过任何第三方服务器
+    // 填了之后网易云个人功能请求改发往使用者自己的实例
     neteaseApiBase: '',
     mcpToken: '',             // MCP 服务器 accessToken（扫码登录后获取）
     defaultSource: 'netease', // 默认音源
@@ -491,7 +491,7 @@
         console.log('[getSongUrl 个人网易云] 命中缓存 songId=' + cleanId);
         return Promise.resolve(cached.url);
       }
-      // 自部署 NeteaseCloudMusicApi 实例：/song/url 直出 https 播放链接（无需中转，Cookie 只去使用者自己的实例）
+      // 自部署 NeteaseCloudMusicApi 实例：/song/url 直出 https 播放链接（无需中转）
       var ncmBase = (STATE.neteaseApiBase || '').replace(/\/+$/, '');
       if (ncmBase) {
         // NCM /song/url 的 br 必须是数字码率（parseInt），字符串音质（standard/high/lossless）会变成 NaN 导致 404
@@ -3156,10 +3156,10 @@
           </div>\
         </div>\
         <div class="rmp-settings-group">\
-          <label class="rmp-settings-label">网易云 API 地址（自部署，强烈推荐）</label>\
+          <label class="rmp-settings-label">网易云 API 地址（自部署）</label>\
           <input type="text" class="rmp-settings-input rmp-nea-base-input" placeholder="https://你的实例.vercel.app（留空使用默认服务器）" />\
           <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:4px;">\
-            一键部署 NeteaseCloudMusicApi 到自己的 Vercel 后填入地址，你的 Cookie 将只发往你自己的实例，任何第三方（含插件作者）都无法接触\
+            可选。一键部署 NeteaseCloudMusicApi 到自己的 Vercel 后填入地址，网易云请求改发往你配置的地址；留空使用默认服务器\
           </div>\
         </div>\
         <div class="rmp-settings-group">\
