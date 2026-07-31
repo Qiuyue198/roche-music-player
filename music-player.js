@@ -349,12 +349,17 @@
         { ids: '[' + cleanId + ']', level: level, encodeType: 'aac' }, 'POST'
       ).then(function(resp) {
         var d = (resp.data || [])[0] || {};
-        console.log('[getSongUrl 个人网易云] songId=' + cleanId + ' code=' + resp.code + ' url=' + (d.url || '(空)') + ' br=' + d.br, d);
-        return d.url || '';
+        var url = d.url || '';
+        // 网易云返回的播放URL可能是http，在HTTPS环境下会被混合内容策略拦截，强制升级为https
+        if (url && url.indexOf('http://') === 0) url = url.replace('http://', 'https://');
+        console.log('[getSongUrl 个人网易云] songId=' + cleanId + ' code=' + resp.code + ' url=' + (url || '(空)') + ' br=' + d.br, d);
+        return url;
       });
     }
     return api('song_url', { id: cleanId, source: source, br: br }).then(function (data) {
-      return data.url || '';
+      var url = data.url || '';
+      if (url && url.indexOf('http://') === 0) url = url.replace('http://', 'https://');
+      return url;
     });
   }
 
@@ -372,7 +377,8 @@
       if (idx >= qualities.length) return Promise.resolve('');
       var br = qualities[idx];
       return api('song_url', { id: cleanId, source: source, br: br }).then(function (data) {
-        if (data.url) return data.url;
+        var url = data.url && data.url.indexOf('http://') === 0 ? data.url.replace('http://', 'https://') : data.url;
+        if (url) return url;
         return tryNext(idx + 1);
       }).catch(function () {
         return tryNext(idx + 1);
@@ -3431,7 +3437,7 @@
   // 获取网易云用户信息
   function fetchUserInfo() {
     if (!STATE.cookie) return Promise.resolve(null);
-    return api('netease_user_info', {}).then(function (data) {
+    return neteaseApi('/api/nuser/account/get').then(function (data) {
       if (data && data.profile) {
         STATE.userProfile = data.profile;
         saveSettings();
