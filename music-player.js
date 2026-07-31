@@ -2538,6 +2538,21 @@
   background: rgba(180,140,255,0.5); border-radius: 50%;\
 }\
 .rmp-netease-pl-loading { text-align: center; padding: 32px; color: rgba(255,255,255,0.3); }\
+/* QR 登录弹窗 */\
+.rmp-qr-modal { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; }\
+.rmp-qr-modal-mask { position: absolute; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); }\
+.rmp-qr-modal-box { position: relative; background: #1a1a2e; border-radius: 20px; padding: 28px; width: 300px; max-width: 90vw; text-align: center; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 24px 80px rgba(0,0,0,0.6); }\
+.rmp-qr-modal-close { position: absolute; top: 12px; right: 16px; font-size: 22px; color: rgba(255,255,255,0.4); cursor: pointer; line-height: 1; }\
+.rmp-qr-modal-close:hover { color: #fff; }\
+.rmp-qr-modal-title { font-size: 17px; font-weight: 600; color: #fff; margin-bottom: 16px; }\
+.rmp-qr-modal-body { display: flex; flex-direction: column; align-items: center; gap: 12px; }\
+.rmp-qr-img-wrap { width: 200px; height: 200px; border-radius: 16px; background: #fff; padding: 12px; display: flex; align-items: center; justify-content: center; }\
+.rmp-qr-img-wrap img { width: 100%; height: 100%; object-fit: contain; }\
+.rmp-qr-placeholder-el { color: #999; font-size: 13px; }\
+.rmp-qr-status-el { font-size: 13px; color: rgba(255,255,255,0.6); line-height: 1.6; }\
+.rmp-qr-status-el.success { color: #C20C0C; }\
+.rmp-qr-status-el.error { color: #E60026; }\
+';\
 ';
   }
 
@@ -3588,45 +3603,67 @@
     if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('已退出网易云登录');
   }
 
-  // 网易云扫码登录（通过 MCP 服务器）
+  // 网易云扫码登录（动态创建弹窗）
   function startQrLogin() {
-    var refs = STATE.appRefs;
-    refs.qrImg.style.display = 'none';
-    refs.qrPlaceholder.style.display = 'block';
-    refs.qrPlaceholder.textContent = '正在获取二维码...';
-    refs.loginStatus.textContent = '';
-    refs.loginStatus.className = 'rmp-login-status';
+    // 清除旧弹窗
+    var oldModal = document.querySelector('.rmp-qr-modal');
+    if (oldModal) oldModal.remove();
+    if (STATE.qrPollTimer) { clearInterval(STATE.qrPollTimer); STATE.qrPollTimer = null; }
 
-    // 清除旧的轮询
-    if (STATE.qrPollTimer) {
-      clearInterval(STATE.qrPollTimer);
-      STATE.qrPollTimer = null;
-    }
+    // 创建弹窗
+    var overlay = document.createElement('div');
+    overlay.className = 'rmp-qr-modal';
+    overlay.innerHTML = '<div class="rmp-qr-modal-mask"></div>' +
+      '<div class="rmp-qr-modal-box">' +
+        '<div class="rmp-qr-modal-close">×</div>' +
+        '<div class="rmp-qr-modal-title">网易云扫码登录</div>' +
+        '<div class="rmp-qr-modal-body">' +
+          '<div class="rmp-qr-img-wrap"><img class="rmp-qr-img-el" style="display:none;" /><div class="rmp-qr-placeholder-el">正在获取二维码...</div></div>' +
+          '<div class="rmp-qr-status-el"></div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    var qrImg = overlay.querySelector('.rmp-qr-img-el');
+    var qrPlaceholder = overlay.querySelector('.rmp-qr-placeholder-el');
+    var qrStatus = overlay.querySelector('.rmp-qr-status-el');
+
+    // 关闭按钮
+    overlay.querySelector('.rmp-qr-modal-close').addEventListener('click', function() {
+      overlay.remove();
+      if (STATE.qrPollTimer) { clearInterval(STATE.qrPollTimer); STATE.qrPollTimer = null; }
+    });
+    overlay.querySelector('.rmp-qr-modal-mask').addEventListener('click', function() {
+      overlay.remove();
+      if (STATE.qrPollTimer) { clearInterval(STATE.qrPollTimer); STATE.qrPollTimer = null; }
+    });
 
     getQrLogin().then(function (data) {
       if (!data || !data.qr_url) {
-        refs.qrPlaceholder.textContent = '获取二维码失败';
-        refs.loginStatus.textContent = data && data.raw && data.raw.message ? data.raw.message : '获取二维码失败，请检查网络';
-        refs.loginStatus.className = 'rmp-login-status error';
+        qrPlaceholder.textContent = '获取二维码失败';
+        qrStatus.textContent = data && data.raw && data.raw.message ? data.raw.message : '请检查网络';
+        qrStatus.className = 'rmp-qr-status-el error';
         return;
       }
       var qrUrl = data.qr_url;
-      // 用 qrserver 生成 QR 码图片
       var qrImgSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(qrUrl);
-      refs.qrImg.src = qrImgSrc;
-      refs.qrImg.style.display = 'block';
-      refs.qrPlaceholder.style.display = 'none';
-      // 同时显示可点击链接
-      refs.loginStatus.innerHTML = '请用<strong>网易云音乐 APP</strong>扫码<br><a href="' + qrUrl + '" target="_blank" style="color:#6cf;">手机上打不开？点此链接</a>';
-      refs.loginStatus.className = 'rmp-login-status';
+      qrImg.src = qrImgSrc;
+      qrImg.style.display = 'block';
+      qrPlaceholder.style.display = 'none';
+      qrStatus.innerHTML = '请用<strong>网易云音乐 APP</strong>扫码<br><a href="' + qrUrl + '" target="_blank" style="color:#6cf;">手机上打不开？点此链接</a>';
+      qrStatus.className = 'rmp-qr-status-el';
 
       STATE.qrPollTimer = setInterval(function () {
+        if (!document.body.contains(overlay)) {
+          clearInterval(STATE.qrPollTimer);
+          STATE.qrPollTimer = null;
+          return;
+        }
         checkQrLogin().then(function (result) {
           if (!result) return;
           if (result.logged_in) {
-            // 登录成功
-            refs.loginStatus.textContent = '登录成功！';
-            refs.loginStatus.className = 'rmp-login-status success';
+            qrStatus.textContent = '登录成功！';
+            qrStatus.className = 'rmp-qr-status-el success';
             if (result.access_token) {
               STATE.mcpToken = result.access_token;
               saveSettings();
@@ -3642,20 +3679,17 @@
             }
             clearInterval(STATE.qrPollTimer);
             STATE.qrPollTimer = null;
+            setTimeout(function() { overlay.remove(); }, 1500);
           } else {
-            // 检查 raw 数据中的错误码
             var raw = result.raw || {};
             if (raw.code === 800) {
-              refs.loginStatus.textContent = '二维码已过期，请重新获取';
-              refs.loginStatus.className = 'rmp-login-status error';
+              qrStatus.textContent = '二维码已过期，请重新获取';
+              qrStatus.className = 'rmp-qr-status-el error';
               clearInterval(STATE.qrPollTimer);
               STATE.qrPollTimer = null;
             } else if (raw.code === 802) {
-              refs.loginStatus.textContent = '待确认，请在手机上点击确认登录';
-              refs.loginStatus.className = 'rmp-login-status';
-            } else {
-              refs.loginStatus.textContent = '请使用网易云音乐 APP扫码';
-              refs.loginStatus.className = 'rmp-login-status';
+              qrStatus.textContent = '待确认，请在手机上点击确认登录';
+              qrStatus.className = 'rmp-qr-status-el';
             }
           }
         }).catch(function () {
@@ -3663,9 +3697,9 @@
         });
       }, 2000);
     }).catch(function () {
-      refs.qrPlaceholder.textContent = '获取二维码失败';
-      refs.loginStatus.textContent = '请求失败，请检查网络';
-      refs.loginStatus.className = 'rmp-login-status error';
+      qrPlaceholder.textContent = '获取二维码失败';
+      qrStatus.textContent = '请求失败，请检查网络';
+      qrStatus.className = 'rmp-qr-status-el error';
     });
   }
 
