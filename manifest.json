@@ -4,7 +4,7 @@
   "version": "1.14.0",
   "description": "音乐播放器，网易云直连官方API，彻底剥离GD后端",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/yechen1844/roche-music-player/main/music-player.js?ts=20260731v6",
+  "entry": "https://raw.githubusercontent.com/yechen1844/roche-music-player/main/music-player.js?ts=20260731235959",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
