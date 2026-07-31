@@ -407,8 +407,8 @@
   // MCP 服务器 API 调用（通过 CF Worker /music 端点透传到腾讯云）
   function mcpApi(endpoint, params) {
     params = params || {};
-    // login/start → mcp_login_start, user/playlists → mcp_user_playlists
-    var actionName = 'mcp_' + endpoint.replace(/\//g, '_');
+    // login/start → ncm_login_start, user/playlists → ncm_user_playlists
+     var actionName = 'ncm_' + endpoint.replace(/\//g, '_');
     var url = STATE.backend.replace(/\/+$/, '') + '/music?action=' + encodeURIComponent(actionName);
     Object.keys(params).forEach(function(k) {
       url += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);

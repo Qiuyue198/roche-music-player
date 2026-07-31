@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "音乐播放器",
-  "version": "1.10.1",
+  "version": "1.11.0",
   "description": "音乐播放器，扫码登录走MCP服务器，全平台搜索",
   "author": "Roche",
-  "entry": "https://raw.githubusercontent.com/yechen1844/roche-music-player/main/music-player.js?ts=20260731",
+  "entry": "https://raw.githubusercontent.com/yechen1844/roche-music-player/main/music-player.js?ts=20260731v2",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
