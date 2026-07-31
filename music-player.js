@@ -2,7 +2,7 @@
   'use strict';
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-07-31-v1.15.9';
+  var BUILD_TIME = '2026-07-31-v1.15.11';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -349,24 +349,14 @@
     var cleanId = String(id).indexOf(':') >= 0 ? String(id).split(':').pop() : String(id);
     var br = quality || STATE.quality;
     if (isPersonal && STATE.cookie && (source === 'netease')) {
-      var csrf = getNeCsrf();
-      var brMap = { 'standard': 'standard', 'high': 'higher', 'lossless': 'lossless' };
-      var level = brMap[br] || 'standard';
-      // encodeType 为必填参数。aac 会返回 jdyyaac 加密流（CDN权限校验严→403），
-      // 改用 mp3 尝试返回普通流（非加密路径，CDN放行）
-      return neteaseApi('/api/song/enhance/player/url/v1?csrf_token=' + encodeURIComponent(csrf),
-        { ids: '[' + cleanId + ']', level: level, encodeType: 'mp3' }, 'POST'
-      ).then(function(resp) {
-        var d = (resp.data || [])[0] || {};
-        var url = d.url || '';
-        // 网易云CDN对https直连返回403，且签名绑定VPS出口IP。
-        // 音频URL必须走VPS代理转发（服务端用http拉取，返回流给前端播放）
-        if (url && url.indexOf('http') === 0) {
-          url = STATE.mcpBackend.replace(/\/+$/, '') + '/proxy?url=' + encodeURIComponent(url);
-        }
-        console.log('[getSongUrl 个人网易云] songId=' + cleanId + ' code=' + resp.code + ' url=' + (url || '(空)') + ' br=' + d.br, d);
-        return url;
-      });
+      // 网易云 playurl 接口返回的 CDN 流（m*.music.126.net）签名绑定获取方IP且对数据中心IP封禁，
+      // VPS代理生成→VPS拉取仍403。改用官方公开外链接口：
+      // music.163.com/song/media/outer/url?id=xxx.mp3 → 302 到公开分享音频（无防盗链、不绑定IP）
+      // 经 VPS 代理请求（music.163.com 域代理已验证可访问），代理跟随 302 返回音频流
+      var outerUrl = 'https://music.163.com/song/media/outer/url?id=' + encodeURIComponent(cleanId) + '.mp3';
+      var url = STATE.mcpBackend.replace(/\/+$/, '') + '/proxy?url=' + encodeURIComponent(outerUrl);
+      console.log('[getSongUrl 个人网易云-外链] songId=' + cleanId + ' url=' + url);
+      return Promise.resolve(url);
     }
     return api('song_url', { id: cleanId, source: source, br: br }).then(function (data) {
       var url = data.url || '';
@@ -3995,7 +3985,7 @@
   window.RochePlugin.register({
     id: 'roche-music-player',
     name: '音乐播放器',
-    version: '1.15.10',
+    version: '1.15.11',
 
     apps: [{
       id: 'roche-music-player-home',
