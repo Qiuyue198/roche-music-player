@@ -4,7 +4,7 @@
   "version": "2.0.1",
   "description": "v2.0.1：视觉美化打磨——网易云红渐变登录卡片、子导航红色滑块、进度条渐变光晕、歌词当前行红色光晕、播放界面布局对齐；第三方音源已失效，仅支持网易云登录",
   "author": "Roche",
-  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@master/music-player.js",
+  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@e47d398/music-player.js",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
