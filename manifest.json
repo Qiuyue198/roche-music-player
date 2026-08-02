@@ -1,8 +1,8 @@
 {
   "id": "roche-music-player",
   "name": "网易云音乐",
-  "version": "2.0.0",
-  "description": "v2.0.0：彻底移除第三方音乐源，仅保留网易云官方API；网易云红风格UI，黑胶唱片旋转动画；每日推荐、歌单、搜索、扫码登录、灵动岛、翻译歌词；支持歌词注入对话，让AI能听到你放的歌",
+  "version": "2.0.1",
+  "description": "v2.0.1：视觉美化打磨——网易云红渐变登录卡片、子导航红色滑块、进度条渐变光晕、歌词当前行红色光晕、播放界面布局对齐；第三方音源已失效，仅支持网易云登录",
   "author": "Roche",
   "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player/music-player.js",
   "hash": "",

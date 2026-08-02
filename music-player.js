@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-08-03-v2.0.0';
+  var BUILD_TIME = '2026-08-03-v2.0.1';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -2126,11 +2126,12 @@
 }\
 .rmp-progress-fill {\
   height: 100%;\
-  background: #C20C0C;\
+  background: linear-gradient(90deg, #EC4141 0%, #C20C0C 100%);\
   border-radius: 3px;\
   width: 0%;\
   position: relative;\
   transition: width 0.1s linear;\
+  box-shadow: 0 0 12px rgba(194,12,12,0.5);\
 }\
 .rmp-progress-fill::after {\
   content: "";\
@@ -2210,6 +2211,8 @@
   border: none;\
 }\
 .rmp-lyrics-container {\
+  flex: 1;\
+  min-height: 0;\
   max-height: 300px;\
   overflow-y: auto;\
   text-align: center;\
@@ -2231,6 +2234,7 @@
   font-size: 16px;\
   font-weight: 600;\
   transform: scale(1.02);\
+  text-shadow: 0 0 14px rgba(194,12,12,0.55), 0 2px 10px rgba(194,12,12,0.25);\
 }\
 .rmp-lyric-translation {\
   font-size: 12px;\
@@ -2633,6 +2637,21 @@
   gap: 12px;\
   flex: 1;\
 }\
+/* 未登录区：网易云红渐变玻璃卡片 */\
+.rmp-netease-logged-out {\
+  background: linear-gradient(135deg, rgba(194,12,12,0.16) 0%, rgba(194,12,12,0.04) 55%, rgba(255,255,255,0.02) 100%);\
+  border: 1px solid rgba(194,12,12,0.24);\
+  border-radius: 16px;\
+  padding: 12px 14px;\
+  backdrop-filter: blur(12px);\
+  -webkit-backdrop-filter: blur(12px);\
+  box-shadow: 0 8px 28px rgba(194,12,12,0.14), inset 0 1px 0 rgba(255,255,255,0.06);\
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;\
+}\
+.rmp-netease-logged-out:hover {\
+  border-color: rgba(194,12,12,0.36);\
+  box-shadow: 0 10px 34px rgba(194,12,12,0.2), inset 0 1px 0 rgba(255,255,255,0.08);\
+}\
 .rmp-netease-avatar {\
   width: 44px; height: 44px;\
   border-radius: 50%;\
@@ -2659,7 +2678,13 @@
 }\
 .rmp-netease-login-icon svg { width: 22px; height: 22px; fill: #C20C0C; }\
 .rmp-netease-login-text {\
-  flex: 1; font-size: 14px; color: rgba(255,255,255,0.6);\
+  flex: 1; font-size: 14px; color: rgba(255,255,255,0.65);\
+}\
+.rmp-netease-login-info {\
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;\
+}\
+.rmp-netease-login-sub {\
+  font-size: 11px; color: rgba(255,255,255,0.38);\
 }\
 .rmp-netease-subnav {\
   display: flex; gap: 2px; padding: 0 0 10px;\
@@ -2768,7 +2793,10 @@
         <div class="rmp-netease-user-area rmp-netease-logged-out">\
           <div class="rmp-netease-login-hint">\
             <div class="rmp-netease-login-icon"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg></div>\
-            <div class="rmp-netease-login-text">登录网易云音乐，享受个人歌单与每日推荐</div>\
+            <div class="rmp-netease-login-info">\
+              <div class="rmp-netease-login-text">登录网易云音乐，享受个人歌单与每日推荐</div>\
+              <div class="rmp-netease-login-sub">第三方音源已失效，仅支持网易云登录</div>\
+            </div>\
           </div>\
           <button class="rmp-btn rmp-netease-login-btn" style="flex-shrink:0;">登录</button>\
         </div>\
@@ -3651,7 +3679,7 @@
       }
       renderRecsList(songs);
     }).catch(function() {
-      refs.neRecsList.innerHTML = '<div class="rmp-empty-state">加载失败，请检查Cookie是否有效</div>';
+      refs.neRecsList.innerHTML = '<div class="rmp-empty-state">加载失败，请检查Cookie是否有效（第三方音源已失效，仅支持网易云登录）</div>';
     });
   }
 
@@ -3783,7 +3811,7 @@
       });
       renderNeSearchResults();
     }).catch(function() {
-      refs.neSearchResults.innerHTML = '<div class="rmp-empty-state">加载失败</div>';
+      refs.neSearchResults.innerHTML = '<div class="rmp-empty-state">加载失败（第三方音源已失效，仅支持网易云登录）</div>';
     });
   }
 
