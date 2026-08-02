@@ -4,7 +4,7 @@
   "version": "2.0.0",
   "description": "v2.0.0：彻底移除第三方音乐源，仅保留网易云官方API；全新网易云风格UI，黑胶唱片旋转动画；新增热歌榜、推荐歌单、搜索功能；支持歌词注入对话，让AI能听到你放的歌",
   "author": "Roche",
-  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player/music-player.js",
+  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@master/music-player.js",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
