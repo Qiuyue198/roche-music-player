@@ -4324,9 +4324,20 @@
   // Cookie 从用户自己的实例返回，只存用户本地，不经过任何第三方服务器
   function startNcmQrLogin(ncmBase, overlay, qrImg, qrPlaceholder, qrStatus) {
     function ncmGet(path) {
-      return fetch(ncmBase + path).then(function (r) { return r.json(); });
+      console.log('[扫码登录 ncmGet]', path);
+      return fetch(ncmBase + path).then(function (r) {
+        return r.text().then(function (text) {
+          console.log('[扫码登录 check 原始返回]', text.substring(0, 500));
+          try { return JSON.parse(text); }
+          catch (e) {
+            console.error('[扫码登录 JSON解析失败]', text.substring(0, 300));
+            throw e;
+          }
+        });
+      });
     }
     ncmGet('/login/qr/key').then(function (keyResp) {
+      console.log('[扫码登录] key 返回', keyResp);
       var unikey = keyResp && keyResp.data && keyResp.data.unikey;
       if (!unikey) {
         qrPlaceholder.textContent = '获取二维码失败';
@@ -4361,6 +4372,7 @@
           ncmGet('/login/qr/check?key=' + encodeURIComponent(unikey)).then(function (resp) {
             var code = resp && resp.code;
             var dd = (resp && resp.data) || {};
+            console.log('[扫码登录轮询] code=' + code + ' resp=', resp);
             if (code === 803) {
               // 登录成功：cookie 在 data.cookie（纯值）或顶层 cookie（Set-Cookie 串，需清洗）
               var cookie = cleanNcmCookie(dd.cookie || resp.cookie || '');
