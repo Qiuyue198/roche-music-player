@@ -4435,7 +4435,7 @@
     var result = '【user当前正在听音乐】\n';
 
     // 切歌提醒：如果用户刚刚通过灵动岛切歌，在注入内容开头提醒char
-    if (STATE.justSwitched && (Date.now() - STATE.justSwitched.time) < 120000) {
+    if (STATE.justSwitched && (Date.now() - STATE.justSwitched.time) < 300000) {
       result += '（user刚刚切换了歌曲为《' + (STATE.justSwitched.name || '未知') + '》— ' + (STATE.justSwitched.artist || '未知') + '）\n';
     }
     STATE.justSwitched = null;
@@ -4528,7 +4528,7 @@
     chat: {
       scope: { conversationTypes: ['direct', 'group'] },
       // 点歌方式：工具调用（声明 play_song 工具，char 调用即可点歌）
-      promptOnly: '你具有音乐点歌能力。可用工具：play_song（点歌播放）、search_music（搜索歌曲查看结果）、view_playlist（查看user歌单或歌单内歌曲）、create_playlist（创建新歌单）、add_to_playlist（收藏歌曲到歌单）、remove_from_playlist（从歌单删除歌曲）、play_history（查看user听歌记录）、like_song（红心收藏歌曲）、daily_recommend（获取每日推荐歌曲）。user 当前正在听的音乐内容会自动注入你的上下文。',
+      promptOnly: '你具有音乐点歌能力。当你想让 user 听某首歌时，调用 play_song 工具（参数：song 歌名，artist 歌手可选）搜索并播放。调用后可以正常说话，user 会看到歌曲切换。同时你能感知 user 当前正在听的音乐内容（如果已注入）。',
       contextProvider: contextProvider,
       tools: [{
         id: 'play_song',
@@ -4586,170 +4586,6 @@
             return playBest(pickBest(songs));
           }).catch(function (e) {
             return { success: false, message: e.message || '网易云搜索失败' };
-          });
-        }
-      }, {
-        // 搜索歌曲（仅查看结果，不播放）
-        id: 'search_music',
-        description: '搜索网易云音乐曲库，返回歌曲列表供查看。不自动播放。',
-        parameters: { keyword: 'string', limit: 'number' },
-        execute: function (args, ctx) {
-          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
-          var kw = String((args && args.keyword) || '');
-          var limit = Math.min(parseInt((args && args.limit) || '10', 10) || 10, 30);
-          if (!kw) return Promise.resolve({ error: 'missing keyword' });
-          return neteaseApi('/api/search/get?s=' + encodeURIComponent(kw) + '&type=1&limit=' + limit).then(function (resp) {
-            var result = resp.result || {};
-            var songs = (result.songs || []).map(function (s) {
-              var ar = s.artists || s.ar || [];
-              var al = s.album || s.al || {};
-              return { id: s.id, name: s.name, artist: ar.map(function (a) { return a.name; }).join('/'), album: al.name || '' };
-            });
-            return { success: true, total: songs.length, songs: songs };
-          }).catch(function (e) {
-            return { success: false, message: e.message || '搜索失败' };
-          });
-        }
-      }, {
-        // 查看用户歌单或歌单详情
-        id: 'view_playlist',
-        description: '查看 user 的网易云歌单列表，或查看某个歌单的歌曲详情。不传 playlist_id 时返回歌单列表。',
-        parameters: { playlist_id: 'string' },
-        execute: function (args, ctx) {
-          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
-          var plId = args && args.playlist_id ? String(args.playlist_id) : '';
-          if (!plId) {
-            // 返回歌单列表
-            return neteaseApi('/api/nuser/account/get').then(function (resp) {
-              var uid = (resp.profile || {}).userId;
-              if (!uid) return { success: false, message: '获取用户信息失败' };
-              return neteaseApi('/api/user/playlist?uid=' + uid + '&limit=50&offset=0');
-            }).then(function (resp) {
-              if (!resp || !resp.playlist) return { success: false, message: '获取歌单失败' };
-              var list = resp.playlist.map(function (pl) {
-                return { id: pl.id, name: pl.name, track_count: pl.trackCount || 0 };
-              });
-              return { success: true, total: list.length, playlists: list };
-            }).catch(function (e) {
-              return { success: false, message: e.message || '获取歌单失败' };
-            });
-          }
-          // 返回歌单详情
-          return neteaseApi('/api/v6/playlist/detail?id=' + plId).then(function (resp) {
-            var pl = resp.playlist || {};
-            var tracks = (pl.tracks || []).map(function (t) {
-              var ar = t.ar || t.artists || [];
-              return { id: t.id, name: t.name, artist: ar.map(function (a) { return a.name; }).join('/') };
-            });
-            return { success: true, name: pl.name, song_count: tracks.length, songs: tracks };
-          }).catch(function (e) {
-            return { success: false, message: e.message || '获取歌单详情失败' };
-          });
-        }
-      }, {
-        // 创建歌单
-        id: 'create_playlist',
-        description: '为 user 创建一个新的网易云歌单。',
-        parameters: { name: 'string' },
-        execute: function (args, ctx) {
-          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
-          var name = String((args && args.name) || '');
-          if (!name) return Promise.resolve({ error: 'missing playlist name' });
-          return neteaseApi('/api/playlist/create?name=' + encodeURIComponent(name), {}, 'POST').then(function (resp) {
-            var pl = resp.playlist || {};
-            return { success: true, id: pl.id, name: pl.name, message: '歌单「' + name + '」创建成功' };
-          }).catch(function (e) {
-            return { success: false, message: e.message || '创建歌单失败' };
-          });
-        }
-      }, {
-        // 收藏歌曲到歌单
-        id: 'add_to_playlist',
-        description: '将一首歌添加到 user 的指定网易云歌单中。',
-        parameters: { song_id: 'string', playlist_id: 'string' },
-        execute: function (args, ctx) {
-          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
-          var songId = String((args && args.song_id) || '');
-          var plId = String((args && args.playlist_id) || '');
-          if (!songId || !plId) return Promise.resolve({ error: 'missing song_id or playlist_id' });
-          return neteaseApi('/api/playlist/tracks?op=add&pid=' + plId + '&tracks=' + songId, {}, 'POST').then(function (resp) {
-            return { success: true, message: '歌曲已添加到歌单', body: resp.body || resp };
-          }).catch(function (e) {
-            return { success: false, message: e.message || '添加失败，歌曲可能已在歌单中' };
-          });
-        }
-      }, {
-        // 从歌单删除歌曲
-        id: 'remove_from_playlist',
-        description: '从 user 的指定网易云歌单中删除一首歌。',
-        parameters: { song_id: 'string', playlist_id: 'string' },
-        execute: function (args, ctx) {
-          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
-          var songId = String((args && args.song_id) || '');
-          var plId = String((args && args.playlist_id) || '');
-          if (!songId || !plId) return Promise.resolve({ error: 'missing song_id or playlist_id' });
-          return neteaseApi('/api/playlist/tracks?op=del&pid=' + plId + '&tracks=' + songId, {}, 'POST').then(function (resp) {
-            return { success: true, message: '歌曲已从歌单删除', body: resp.body || resp };
-          }).catch(function (e) {
-            return { success: false, message: e.message || '删除失败' };
-          });
-        }
-      }, {
-        // 听歌记录
-        id: 'play_history',
-        description: '查看 user 的网易云听歌记录。type=1 为最近一周，type=0 为全部。',
-        parameters: { type: 'number' },
-        execute: function (args, ctx) {
-          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
-          var type = parseInt((args && args.type) || '1', 10);
-          return neteaseApi('/api/nuser/account/get').then(function (resp) {
-            var uid = (resp.profile || {}).userId;
-            if (!uid) return { success: false, message: '获取用户信息失败' };
-            return neteaseApi('/api/v1/play/record?uid=' + uid + '&type=' + type + '&limit=50');
-          }).then(function (resp) {
-            if (!resp) return { success: false, message: '获取记录失败' };
-            var list = (resp.allData || resp.weekData || []).map(function (item) {
-              var song = item.song || {};
-              var ar = song.ar || song.artists || [];
-              return { id: song.id, name: song.name, artist: ar.map(function (a) { return a.name; }).join('/'), play_count: item.playCount || 0 };
-            });
-            return { success: true, total: list.length, songs: list };
-          }).catch(function (e) {
-            return { success: false, message: e.message || '获取听歌记录失败' };
-          });
-        }
-      }, {
-        // 红心收藏歌曲
-        id: 'like_song',
-        description: '红心收藏一首网易云歌曲（添加到"我喜欢的音乐"）。',
-        parameters: { song_id: 'string' },
-        execute: function (args, ctx) {
-          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
-          var songId = String((args && args.song_id) || '');
-          if (!songId) return Promise.resolve({ error: 'missing song_id' });
-          return neteaseApi('/api/like?trackId=' + songId + '&like=true', {}, 'POST').then(function (resp) {
-            return { success: true, message: '已红心收藏', body: resp };
-          }).catch(function (e) {
-            return { success: false, message: e.message || '收藏失败' };
-          });
-        }
-      }, {
-        // 每日推荐
-        id: 'daily_recommend',
-        description: '获取 user 的网易云每日推荐歌曲列表。',
-        parameters: {},
-        execute: function (args, ctx) {
-          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
-          return neteaseApi('/api/v3/discovery/recommend/songs', {}, 'POST').then(function (resp) {
-            var data = resp.data || {};
-            var list = (data.dailySongs || []).map(function (s) {
-              var ar = s.ar || s.artists || [];
-              var al = s.al || s.album || {};
-              return { id: s.id, name: s.name, artist: ar.map(function (a) { return a.name; }).join('/'), album: al.name || '' };
-            });
-            return { success: true, total: list.length, songs: list };
-          }).catch(function (e) {
-            return { success: false, message: e.message || '获取每日推荐失败' };
           });
         }
       }]
