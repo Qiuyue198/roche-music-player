@@ -86,6 +86,8 @@
     userPlaylistsCache: [],
     // 网易云播放 URL 缓存（songId -> {url, ts}），避免每次播放都重新请求 /play
     songUrlCache: {},
+    // 夜间模式
+    themeDark: false,
     initialized: false
   };
 
@@ -1860,13 +1862,14 @@
   function getAppStyles() {
     return '\
 .roche-music-player {\
-  /* ===== 网易云白色小清新 · 设计变量 ===== */\
+  /* ===== 网易云白色小清新 · 设计变量（日间模式默认值）===== */\
   --rmp-red: #C20C0C;\
   --rmp-red-light: #EC4141;\
   --rmp-red-gradient: linear-gradient(135deg, #EC4141, #C20C0C);\
   --rmp-bg-base: #f5f5f7;\
   --rmp-bg-card: #ffffff;\
   --rmp-bg-group: #f7f7f7;\
+  --rmp-bg-input: #f5f5f7;\
   --rmp-text-primary: #333333;\
   --rmp-text-secondary: #888888;\
   --rmp-text-tertiary: #bbbbbb;\
@@ -1874,13 +1877,19 @@
   --rmp-radius: 8px;\
   --rmp-radius-lg: 12px;\
   --rmp-shadow: 0 2px 12px rgba(0,0,0,0.06);\
+  --rmp-blur: 0px;\
   --rmp-transition: cubic-bezier(0.16, 1, 0.3, 1);\
+  /* 正在播放面板变量（日间浅色版）*/\
+  --rmp-np-bg: #f0f0f0;\
+  --rmp-np-text: #333333;\
+  --rmp-np-text-secondary: #888888;\
+  --rmp-np-vinyl: #2a2a2a;\
   width: 100%;\
   height: 100%;\
   display: flex;\
   flex-direction: column;\
-  /* 纯色背景，App 端不使用毛玻璃/光晕装饰 */\
-  background: #f5f5f7;\
+  /* 日间：纯色背景 */\
+  background: var(--rmp-bg-base);\
   color: var(--rmp-text-primary);\
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;\
   font-size: 14px;\
@@ -1892,6 +1901,30 @@
   border: 1px solid var(--rmp-border);\
   box-shadow: var(--rmp-shadow);\
 }\
+/* ===== 夜间模式：深色毛玻璃 + 网易云红光晕，覆盖变量 ===== */\
+.roche-music-player.rmp-theme-dark {\
+  --rmp-bg-base: #1a1a1f;\
+  --rmp-bg-card: rgba(255,255,255,0.04);\
+  --rmp-bg-group: rgba(255,255,255,0.03);\
+  --rmp-bg-input: rgba(255,255,255,0.06);\
+  --rmp-text-primary: rgba(255,255,255,0.9);\
+  --rmp-text-secondary: rgba(255,255,255,0.5);\
+  --rmp-text-tertiary: rgba(255,255,255,0.3);\
+  --rmp-border: rgba(255,255,255,0.08);\
+  --rmp-shadow: 0 8px 32px rgba(0,0,0,0.4);\
+  --rmp-blur: 24px;\
+  /* 正在播放面板（夜间深色沉浸式）*/\
+  --rmp-np-bg: #1a1a1a;\
+  --rmp-np-text: #ffffff;\
+  --rmp-np-text-secondary: rgba(255,255,255,0.5);\
+  --rmp-np-vinyl: #2a2a2a;\
+  background:\
+    radial-gradient(1200px 600px at 80% -10%, rgba(194,12,12,0.10) 0%, transparent 60%),\
+    radial-gradient(900px 500px at -10% 110%, rgba(236,65,65,0.06) 0%, transparent 60%),\
+    linear-gradient(165deg, #212126 0%, #151519 45%, #1a1a1f 100%);\
+  -webkit-backdrop-filter: blur(24px) saturate(160%);\
+  backdrop-filter: blur(24px) saturate(160%);\
+}\
 .roche-music-player > * { position: relative; z-index: 1; }\
 .rmp-tabs {\
   display: flex;\
@@ -1900,14 +1933,14 @@
   flex-shrink: 0;\
   overflow-x: auto;\
   -webkit-overflow-scrolling: touch;\
-  border-bottom: 1px solid rgba(0,0,0,0.06);\
+  border-bottom: 1px solid var(--rmp-border);\
 }\
 .rmp-tabs::-webkit-scrollbar { display: none; }\
 .rmp-tab {\
   padding: 8px 16px;\
   border: none;\
   background: transparent;\
-  color: #888888;\
+  color: var(--rmp-text-secondary);\
   font-size: 13px;\
   cursor: pointer;\
   border-radius: 0;\
@@ -1941,7 +1974,7 @@
 }\
 .rmp-panels::-webkit-scrollbar { width: 6px; }\
 .rmp-panels::-webkit-scrollbar-track { background: transparent; }\
-.rmp-panels::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 3px; }\
+.rmp-panels::-webkit-scrollbar-thumb { background: var(--rmp-border); border-radius: 3px; }\
 .rmp-panel { display: none; }\
 .rmp-panel.active { display: block; }\
 .rmp-card {\
@@ -1950,13 +1983,13 @@
   padding: 16px;\
   margin-bottom: 12px;\
   border: 1px solid var(--rmp-border);\
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);\
+  box-shadow: var(--rmp-shadow);\
   position: relative;\
   transition: border-color 0.3s var(--rmp-transition), box-shadow 0.3s var(--rmp-transition);\
 }\
 .rmp-card:hover {\
-  border-color: #d8d8d8;\
-  box-shadow: 0 4px 18px rgba(0,0,0,0.08);\
+  border-color: var(--rmp-border);\
+  box-shadow: var(--rmp-shadow);\
 }\
 .rmp-search-bar {\
   display: flex;\
@@ -1968,7 +2001,7 @@
   flex: 1;\
   min-width: 160px;\
   padding: 10px 16px;\
-  background: #f5f5f7;\
+  background: var(--rmp-bg-input);\
   border: 1px solid transparent;\
   border-radius: 999px;\
   color: var(--rmp-text-primary);\
@@ -1978,14 +2011,14 @@
 }\
 .rmp-search-input:focus {\
   border-color: #EC4141;\
-  background: #fff;\
+  background: var(--rmp-bg-card);\
   box-shadow: 0 0 0 3px rgba(194,12,12,0.12);\
 }\
 .rmp-search-input::placeholder { color: var(--rmp-text-tertiary); }\
 .rmp-select {\
   padding: 10px 14px;\
-  background: #fff;\
-  border: 1px solid rgba(0,0,0,0.08);\
+  background: var(--rmp-bg-card);\
+  border: 1px solid var(--rmp-border);\
   border-radius: 999px;\
   color: var(--rmp-text-primary);\
   font-size: 13px;\
@@ -1994,7 +2027,7 @@
   transition: border-color 0.2s;\
 }\
 .rmp-select:focus { border-color: #EC4141; }\
-.rmp-select option { background: #fff; color: var(--rmp-text-primary); }\
+.rmp-select option { background: var(--rmp-bg-card); color: var(--rmp-text-primary); }\
 .rmp-btn {\
   padding: 10px 18px;\
   background: linear-gradient(135deg, #EC4141 0%, #C20C0C 100%);\
@@ -2015,16 +2048,16 @@
 .rmp-btn:hover { background: linear-gradient(135deg, #f45555 0%, #d41414 100%); box-shadow: 0 6px 20px rgba(194,12,12,0.35); transform: translateY(-1px); }\
 .rmp-btn:active { transform: translateY(0) scale(0.97); }\
 .rmp-btn-secondary {\
-  background: #f5f5f7;\
+  background: var(--rmp-bg-input);\
   color: var(--rmp-text-primary);\
   box-shadow: none;\
 }\
-.rmp-btn-secondary:hover { background: #ececee; box-shadow: none; }\
+.rmp-btn-secondary:hover { background: var(--rmp-bg-group); box-shadow: none; }\
 .rmp-btn-icon {\
   padding: 10px;\
   min-width: 44px;\
   min-height: 44px;\
-  background: #f5f5f7;\
+  background: var(--rmp-bg-input);\
   color: var(--rmp-text-secondary);\
   border: none;\
   border-radius: 50%;\
@@ -2050,19 +2083,19 @@
   padding: 10px 12px;\
   border-radius: 6px;\
   cursor: pointer;\
-  background: #fff;\
+  background: var(--rmp-bg-card);\
   transition: background 0.18s ease;\
   min-height: 44px;\
   position: relative;\
 }\
 .rmp-song-item:hover {\
-  background: #f5f5f7;\
+  background: var(--rmp-bg-group);\
 }\
 .rmp-song-item:active {\
-  background: #ececee;\
+  background: var(--rmp-bg-group);\
 }\
 .rmp-song-item.playing {\
-  background: #f5f5f7;\
+  background: var(--rmp-bg-group);\
 }\
 .rmp-song-cover {\
   width: 40px;\
@@ -2070,7 +2103,7 @@
   border-radius: 4px;\
   object-fit: cover;\
   flex-shrink: 0;\
-  background: #f0f0f2;\
+  background: var(--rmp-bg-group);\
   display: flex;\
   align-items: center;\
   justify-content: center;\
@@ -2140,13 +2173,13 @@
   flex-direction: column;\
   align-items: center;\
   gap: 16px;\
-  /* 黑胶沉浸式深色背景：纯黑 + 模糊封面蒙层由 .rmp-np-vinyl-bg 提供 */\
+  /* 正在播放面板：日间浅色 / 夜间深色沉浸式（由 --rmp-np-* 变量驱动）*/\
   position: relative;\
   padding: 24px 16px;\
   border-radius: var(--rmp-radius-lg);\
-  background: #1a1a1a;\
+  background: var(--rmp-np-bg);\
   overflow: hidden;\
-  color: #fff;\
+  color: var(--rmp-np-text);\
 }\
 @media (min-width: 600px) {\
   .rmp-now-playing {\
@@ -2259,26 +2292,26 @@
 .rmp-np-title {\
   font-size: 20px;\
   font-weight: 700;\
-  color: #fff;\
+  color: var(--rmp-np-text);\
   margin-bottom: 4px;\
 }\
 .rmp-np-artist {\
   font-size: 14px;\
-  color: rgba(255,255,255,0.55);\
+  color: var(--rmp-np-text-secondary);\
 }\
 .rmp-np-album {\
   font-size: 12px;\
-  color: rgba(255,255,255,0.38);\
+  color: var(--rmp-np-text-secondary);\
   margin-top: 2px;\
 }\
-/* 正在播放面板内按钮：深色风格覆盖（避免使用主面板浅色按钮）*/\
+/* 正在播放面板内按钮：跟随面板主题色 */\
 .rmp-now-playing .rmp-btn-icon {\
   background: rgba(255,255,255,0.08);\
-  color: rgba(255,255,255,0.85);\
+  color: var(--rmp-np-text);\
 }\
 .rmp-now-playing .rmp-btn-icon:hover {\
   background: rgba(194,12,12,0.22);\
-  color: #fff;\
+  color: var(--rmp-np-text);\
 }\
 .rmp-progress-bar {\
   width: 100%;\
@@ -2327,7 +2360,7 @@
   display: flex;\
   justify-content: space-between;\
   font-size: 12px;\
-  color: rgba(255,255,255,0.4);\
+  color: var(--rmp-np-text-secondary);\
   margin-bottom: 12px;\
 }\
 .rmp-controls {\
@@ -2408,7 +2441,7 @@
 .rmp-lyric-line {\
   padding: 8px 16px;\
   font-size: 14px;\
-  color: rgba(255,255,255,0.35);\
+  color: var(--rmp-np-text-secondary);\
   transition: all 0.3s ease;\
   line-height: 1.6;\
 }\
@@ -2429,7 +2462,7 @@
 }\
 .rmp-lyrics-empty {\
   text-align: center;\
-  color: rgba(255,255,255,0.3);\
+  color: var(--rmp-np-text-secondary);\
   padding: 40px 0;\
   font-size: 14px;\
 }\
@@ -2462,7 +2495,7 @@
 .rmp-settings-input {\
   width: 100%;\
   padding: 11px 14px;\
-  background: #f5f5f7;\
+  background: var(--rmp-bg-input);\
   border: 1px solid transparent;\
   border-radius: var(--rmp-radius);\
   color: var(--rmp-text-primary);\
@@ -2473,7 +2506,7 @@
 }\
 .rmp-settings-input:focus {\
   border-color: var(--rmp-red);\
-  background: #fff;\
+  background: var(--rmp-bg-card);\
   box-shadow: 0 0 0 3px rgba(194,12,12,0.14);\
 }\
 .rmp-settings-input::placeholder { color: var(--rmp-text-tertiary); }\
@@ -2513,14 +2546,14 @@
   max-width: 280px;\
   line-height: 1.5;\
 }\
-/* 用户卡片（已登录状态）：纯白卡片 */\
+/* 用户卡片（已登录状态）*/\
 .rmp-user-card {\
   display: flex;\
   align-items: center;\
   gap: 14px;\
   padding: 16px;\
-  background: #ffffff;\
-  border: 1px solid #eaeaea;\
+  background: var(--rmp-bg-card);\
+  border: 1px solid var(--rmp-border);\
   border-radius: 12px;\
 }\
 .rmp-user-avatar {\
@@ -2528,7 +2561,7 @@
   height: 52px;\
   border-radius: 50%;\
   object-fit: cover;\
-  background: #f0f0f2;\
+  background: var(--rmp-bg-group);\
 }\
 .rmp-user-name {\
   font-size: 16px;\
@@ -2553,7 +2586,7 @@
   display: inline-block;\
   width: 32px;\
   height: 32px;\
-  border: 3px solid rgba(0,0,0,0.1);\
+  border: 3px solid var(--rmp-border);\
   border-top-color: #C20C0C;\
   border-radius: 50%;\
   animation: rmp-app-spin 0.8s linear infinite;\
@@ -2576,9 +2609,9 @@
 .rmp-disclaimer {\
   margin-top: 10px;\
   padding: 10px;\
-  border: 1px solid rgba(0,0,0,0.06);\
+  border: 1px solid var(--rmp-border);\
   border-radius: 8px;\
-  background: #f5f5f7;\
+  background: var(--rmp-bg-group);\
 }\
 /* 网易云免责声明（红色边框 + 同意勾选）*/\
 .rmp-ne-disclaimer {\
@@ -2603,8 +2636,8 @@
   display: flex;\
   align-items: center;\
   gap: 4px;\
-  background: #ffffff;\
-  border-bottom: 1px solid #eaeaea;\
+  background: var(--rmp-bg-card);\
+  border-bottom: 1px solid var(--rmp-border);\
   /* 关键：顶部留出灵动岛空间。灵动岛高度52px + top偏移(默认8px) + safe-area + 缓冲16px */\
   padding: calc(env(safe-area-inset-top) + var(--rmp-island-top, 8px) + 52px + 16px) 8px 8px;\
   flex-shrink: 0;\
@@ -2617,9 +2650,9 @@
 .rmp-debug-block {\
   margin-top: 10px;\
   padding: 10px;\
-  border: 1px solid rgba(0,0,0,0.06);\
+  border: 1px solid var(--rmp-border);\
   border-radius: 8px;\
-  background: #f5f5f7;\
+  background: var(--rmp-bg-group);\
 }\
 .rmp-debug-header {\
   display: flex;\
@@ -2635,8 +2668,8 @@
 .rmp-debug-logs {\
   max-height: 180px;\
   overflow-y: auto;\
-  background: #fff;\
-  border: 1px solid rgba(0,0,0,0.06);\
+  background: var(--rmp-bg-card);\
+  border: 1px solid var(--rmp-border);\
   border-radius: 6px;\
   padding: 6px;\
   font-family: Consolas, Menlo, monospace;\
@@ -2705,8 +2738,8 @@
   min-width: 44px;\
   min-height: 44px;\
   padding: 8px 12px;\
-  background: #f5f5f7;\
-  color: #888888;\
+  background: var(--rmp-bg-input);\
+  color: var(--rmp-text-secondary);\
   border: none;\
   border-radius: 12px;\
   cursor: pointer;\
@@ -2717,7 +2750,7 @@
   justify-content: center;\
   transition: background 0.2s ease, color 0.2s ease;\
 }\
-.rmp-close-btn:hover { background: #ececee; color: #555555; }\
+.rmp-close-btn:hover { background: var(--rmp-bg-group); color: var(--rmp-text-primary); }\
 .rmp-toggle-row {\
   display: flex;\
   align-items: center;\
@@ -2732,7 +2765,7 @@
   position: relative;\
   width: 44px;\
   height: 26px;\
-  background: rgba(0,0,0,0.12);\
+  background: var(--rmp-border);\
   border-radius: 13px;\
   cursor: pointer;\
   transition: background 0.2s ease;\
@@ -2805,7 +2838,7 @@
   align-items: center;\
   gap: 14px;\
   padding: 10px 4px 14px;\
-  border-bottom: 1px solid rgba(0,0,0,0.06);\
+  border-bottom: 1px solid var(--rmp-border);\
   margin-bottom: 12px;\
 }\
 .rmp-netease-user-area {\
@@ -2814,24 +2847,24 @@
   gap: 12px;\
   flex: 1;\
 }\
-/* 未登录区：纯白卡片，圆角12px，浅灰边框 */\
+/* 未登录区：卡片，圆角12px */\
 .rmp-netease-logged-out {\
-  background: #ffffff;\
-  border: 1px solid #eaeaea;\
+  background: var(--rmp-bg-card);\
+  border: 1px solid var(--rmp-border);\
   border-radius: 12px;\
   padding: 12px 14px;\
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);\
+  box-shadow: var(--rmp-shadow);\
   transition: border-color 0.3s ease, box-shadow 0.3s ease;\
 }\
 .rmp-netease-logged-out:hover {\
-  border-color: #d8d8d8;\
-  box-shadow: 0 4px 14px rgba(0,0,0,0.06);\
+  border-color: var(--rmp-border);\
+  box-shadow: var(--rmp-shadow);\
 }\
 .rmp-netease-avatar {\
   width: 40px; height: 40px;\
   border-radius: 50%;\
   object-fit: cover;\
-  background: #f0f0f2;\
+  background: var(--rmp-bg-group);\
   flex-shrink: 0;\
 }\
 .rmp-netease-user-info { flex: 1; min-width: 0; }\
@@ -2862,13 +2895,13 @@
 }\
 .rmp-netease-subnav {\
   display: flex; gap: 4px; padding: 0 0 10px;\
-  border-bottom: 1px solid #eaeaea; margin-bottom: 12px;\
+  border-bottom: 1px solid var(--rmp-border); margin-bottom: 12px;\
   overflow-x: auto; -webkit-overflow-scrolling: touch;\
 }\
 .rmp-netease-subnav::-webkit-scrollbar { display: none; }\
 .rmp-nsub-btn {\
   padding: 7px 16px; border: none; background: transparent;\
-  color: #888888; font-size: 13px; cursor: pointer;\
+  color: var(--rmp-text-secondary); font-size: 13px; cursor: pointer;\
   border-radius: 0; transition: color 0.2s; position: relative; white-space: nowrap; flex-shrink: 0;\
 }\
 .rmp-nsub-btn:hover { color: var(--rmp-text-primary); }\
@@ -2886,17 +2919,17 @@
   display: flex; align-items: center; gap: 12px; padding: 10px;\
   border-radius: var(--rmp-radius); cursor: pointer;\
   transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;\
-  background: #fff; border: 1px solid #eaeaea;\
+  background: var(--rmp-bg-card); border: 1px solid var(--rmp-border);\
 }\
 .rmp-netease-pl-item:hover {\
-  background: #fafafa;\
-  border-color: #d8d8d8;\
-  box-shadow: 0 4px 14px rgba(0,0,0,0.06);\
+  background: var(--rmp-bg-card);\
+  border-color: var(--rmp-border);\
+  box-shadow: var(--rmp-shadow);\
 }\
-.rmp-netease-pl-item:active { background: #f0f0f2; }\
+.rmp-netease-pl-item:active { background: var(--rmp-bg-group); }\
 .rmp-netease-pl-cover {\
   width: 52px; height: 52px; border-radius: 8px; object-fit: cover;\
-  background: #f0f0f2; flex-shrink: 0;\
+  background: var(--rmp-bg-group); flex-shrink: 0;\
 }\
 .rmp-netease-pl-info { flex: 1; min-width: 0; }\
 .rmp-netease-pl-name {\
@@ -2922,7 +2955,7 @@
   white-space: normal; overflow: hidden; text-overflow: ellipsis;\
 }\
 .rmp-netease-playlists .rmp-netease-pl-meta {\
-  font-size: 10px; color: #bbbbbb;\
+  font-size: 10px; color: var(--rmp-text-tertiary);\
 }\
 .rmp-netease-playlists .rmp-netease-pl-arrow { display: none; }\
 .rmp-netease-pl-loading { text-align: center; padding: 32px; color: var(--rmp-text-tertiary); }\
@@ -3008,6 +3041,18 @@
     close: '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>',
     heart: '<svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>'
   };
+
+  // 应用主题（日间/夜间）：在 .roche-music-player 上切换 rmp-theme-dark 类
+  function applyTheme() {
+    var el = (STATE.appRefs && STATE.appRefs.root) ||
+             (STATE.appContainer && STATE.appContainer.querySelector('.roche-music-player'));
+    if (!el) return;
+    if (STATE.themeDark) {
+      el.classList.add('rmp-theme-dark');
+    } else {
+      el.classList.remove('rmp-theme-dark');
+    }
+  }
 
   // 渲染 App
   function renderApp(container) {
@@ -3155,16 +3200,22 @@
     <div class="rmp-panel" data-panel="settings">\
       <div class="rmp-card">\
         <div class="rmp-settings-group">\
+          <div class="rmp-toggle-row">\
+            <span class="rmp-toggle-label">夜间模式</span>\
+            <div class="rmp-toggle rmp-theme-toggle" role="switch" aria-checked="false"></div>\
+          </div>\
+        </div>\
+        <div class="rmp-settings-group">\
           <label class="rmp-settings-label">网易云 Cookie（推荐：粘贴后直接登录，无需扫码）</label>\
           <input type="text" class="rmp-settings-input rmp-cookie-input" placeholder="MUSIC_U=xxx; __csrf=xxx" />\
-          <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:4px;">\
+          <div style="font-size:10px;color:var(--rmp-text-tertiary);margin-top:4px;">\
             获取方式：浏览器打开 music.163.com 登录 → F12 → Application → Cookies → 复制 MUSIC_U 和 __csrf 的值，粘贴为 MUSIC_U=值; __csrf=值 格式\
           </div>\
         </div>\
         <div class="rmp-settings-group">\
           <label class="rmp-settings-label">网易云 API 地址（自部署，强烈推荐）</label>\
           <input type="text" class="rmp-settings-input rmp-nea-base-input" placeholder="https://你的实例.vercel.app（必填）" />\
-          <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:4px;">\
+          <div style="font-size:10px;color:var(--rmp-text-tertiary);margin-top:4px;">\
             一键部署 NeteaseCloudMusicApi 到自己的 Vercel 后填入地址，你的 Cookie 将只发往你自己的实例，任何第三方（含插件作者）都无法接触\
           </div>\
         </div>\
@@ -3201,7 +3252,7 @@
         </div>\
         <button class="rmp-btn rmp-save-settings-btn" style="margin-top:8px;">保存设置</button>\
         <button class="rmp-btn rmp-btn-secondary rmp-reset-island-btn" style="margin-top:6px;">重置灵动岛显示</button>\
-        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.25);margin-top:10px;" class="rmp-version-display">' + BUILD_TIME + '</div>\
+        <div style="text-align:center;font-size:11px;color:var(--rmp-text-tertiary);margin-top:10px;" class="rmp-version-display">' + BUILD_TIME + '</div>\
         <div class="rmp-debug-block">\
           <div class="rmp-debug-header">\
             <span class="rmp-debug-title">调试日志</span>\
@@ -3287,6 +3338,7 @@
       saveSettingsBtn: root.querySelector('.rmp-save-settings-btn'),
       resetIslandBtn: root.querySelector('.rmp-reset-island-btn'),
       lyricsFullToggle: root.querySelector('.rmp-lyrics-full-toggle'),
+      themeToggle: root.querySelector('.rmp-theme-toggle'),
       closeBtn: root.querySelector('.rmp-close-btn'),
       // 设置 — 调试日志
       debugLogsEl: root.querySelector('.rmp-debug-logs'),
@@ -3308,6 +3360,10 @@
     // 初始化开关状态
     if (STATE.islandVisible) STATE.appRefs.islandVisibleToggle.classList.add('on');
     if (STATE.lyricsFullInject) STATE.appRefs.lyricsFullToggle.classList.add('on');
+    if (STATE.themeDark) STATE.appRefs.themeToggle.classList.add('on');
+    if (STATE.appRefs.themeToggle) STATE.appRefs.themeToggle.setAttribute('aria-checked', STATE.themeDark);
+    // 应用主题（日间/夜间）
+    applyTheme();
 
     bindAppEvents();
     updateAppSongInfo();
@@ -3653,6 +3709,16 @@
     function onLyricsFullToggle() { STATE.lyricsFullInject = !STATE.lyricsFullInject; refs.lyricsFullToggle.classList.toggle('on', STATE.lyricsFullInject); saveSettings(); updateContextInject(); }
     refs.lyricsFullToggle.addEventListener('click', onLyricsFullToggle);
     STATE.appCleanups.push(function () { refs.lyricsFullToggle.removeEventListener('click', onLyricsFullToggle); });
+    // 夜间模式开关
+    function onThemeToggle() {
+      STATE.themeDark = !STATE.themeDark;
+      refs.themeToggle.classList.toggle('on', STATE.themeDark);
+      refs.themeToggle.setAttribute('aria-checked', STATE.themeDark);
+      applyTheme();
+      saveSettings();
+    }
+    refs.themeToggle.addEventListener('click', onThemeToggle);
+    STATE.appCleanups.push(function () { refs.themeToggle.removeEventListener('click', onThemeToggle); });
 
     // ===== 调试日志 =====
     if (refs.debugRefreshBtn) {
@@ -3972,7 +4038,7 @@
           refs.neVipBadge.style.color = '#C20C0C';
         } else {
           refs.neVipBadge.textContent = '网易云音乐用户';
-          refs.neVipBadge.style.color = 'rgba(255,255,255,0.4)';
+          refs.neVipBadge.style.color = 'var(--rmp-text-secondary)';
         }
       }
     } else {
@@ -4034,7 +4100,7 @@
       else html += '<div class="rmp-song-cover">' + (name ? name.charAt(0) : '?') + '</div>';
       html += '<div class="rmp-song-info"><div class="rmp-song-name">' + escapeHtml(name) + '</div>';
       html += '<div class="rmp-song-meta">' + escapeHtml(artist) + '</div></div>';
-      if (s.reason) html += '<span style="font-size:10px;color:rgba(255,255,255,0.3);margin-left:4px;flex-shrink:0;">' + escapeHtml(s.reason) + '</span>';
+      if (s.reason) html += '<span style="font-size:10px;color:var(--rmp-text-tertiary);margin-left:4px;flex-shrink:0;">' + escapeHtml(s.reason) + '</span>';
       html += '<div class="rmp-song-actions"><button class="rmp-btn-icon rmp-like-btn" title="红心收藏">' + ICONS.heart + '</button><button class="rmp-btn-icon rmp-add-btn" title="添加到播放列表"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></button></div>';
       html += '</div>';
     }
@@ -4299,7 +4365,7 @@
       html += '<div class="rmp-netease-pl-item" data-plid="' + pl.id + '" style="margin-bottom:6px;">';
       var cover = pl.coverImgUrl || '';
       if (cover) html += '<img class="rmp-netease-pl-cover" src="' + escapeHtml(cover) + '" alt="" />';
-      else html += '<div class="rmp-netease-pl-cover" style="display:flex;align-items:center;justify-content:center;font-size:18px;color:rgba(255,255,255,0.2);">' + (pl.name || '').charAt(0) + '</div>';
+      else html += '<div class="rmp-netease-pl-cover" style="display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--rmp-text-tertiary);">' + (pl.name || '').charAt(0) + '</div>';
       html += '<div class="rmp-netease-pl-info"><div class="rmp-netease-pl-name">' + escapeHtml(pl.name || '') + '</div>';
       html += '<div class="rmp-netease-pl-meta">' + (pl.trackCount || 0) + ' 首歌曲</div></div>';
       html += '</div>';
@@ -4546,6 +4612,10 @@
     if (refs.islandScrollModeSelect) refs.islandScrollModeSelect.value = STATE.islandScrollMode;
     if (refs.islandVisibleToggle) refs.islandVisibleToggle.classList.toggle('on', !!STATE.islandVisible);
     if (refs.lyricsFullToggle) refs.lyricsFullToggle.classList.toggle('on', !!STATE.lyricsFullInject);
+    if (refs.themeToggle) {
+      refs.themeToggle.classList.toggle('on', !!STATE.themeDark);
+      refs.themeToggle.setAttribute('aria-checked', !!STATE.themeDark);
+    }
   }
 
   // 保存设置到 roche.storage（顺序调用，避免并发导致持久化失败）
@@ -4559,6 +4629,7 @@
       STATE.roche.storage.set('rmp_island_visible', STATE.islandVisible ? '1' : '0');
       STATE.roche.storage.set('rmp_island_scroll_mode', STATE.islandScrollMode);
       STATE.roche.storage.set('rmp_lyrics_full_inject', STATE.lyricsFullInject ? '1' : '0');
+      STATE.roche.storage.set('rmp_theme_dark', STATE.themeDark ? '1' : '0');
       STATE.roche.storage.set('rmp_agreed_disclaimer', '1');
       STATE.roche.storage.set('rmp_netease_api_base', STATE.neteaseApiBase || '');
       // 无条件写入 cookie/userProfile：退出登录时 STATE.cookie='' 也要落盘清空，避免旧值残留
@@ -4583,7 +4654,8 @@
       roche.storage.get('rmp_agreed_disclaimer'),
       roche.storage.get('rmp_extended_sources'),
       roche.storage.get('rmp_lyrics_full_inject'),
-      roche.storage.get('rmp_netease_api_base')
+      roche.storage.get('rmp_netease_api_base'),
+      roche.storage.get('rmp_theme_dark')
     ]).then(function (results) {
       if (results[0]) STATE.quality = results[0];
       if (results[1]) STATE.volume = parseFloat(results[1]) || 0.8;
@@ -4616,6 +4688,11 @@
       }
       // 自部署网易云 API 地址
       if (results[12]) STATE.neteaseApiBase = results[12].replace(/\/+$/, '');
+      // 夜间模式
+      if (results[13] !== null && results[13] !== undefined && results[13] !== '') {
+        STATE.themeDark = results[13] === '1';
+      }
+      applyTheme();
     }).catch(function () {});
   }
 
