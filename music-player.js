@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-08-03-v2.0.1';
+  var BUILD_TIME = '2026-08-03-v3.0.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -78,6 +78,8 @@
     islandClosed: false,
     // 歌词注入模式：false=仅当前前后5行，true=全部歌词+标注当前10行范围
     lyricsFullInject: false,
+    // 切歌标记：playSong时设置，contextProvider读取后清除，用于提醒char用户切歌动作
+    justSwitched: null,
     // 网易云播放 URL 缓存（songId -> {url, ts}），避免每次播放都重新请求 /play
     songUrlCache: {},
     initialized: false
@@ -217,7 +219,11 @@
       '/api/v3/discovery/recommend/songs': '/recommend/songs',
       '/api/nuser/account/get': '/user/account',
       '/api/user/playlist': '/user/playlist',
-      '/api/v6/playlist/detail': '/playlist/detail'
+      '/api/v6/playlist/detail': '/playlist/detail',
+      '/api/playlist/create': '/playlist/create',
+      '/api/playlist/tracks': '/playlist/tracks',
+      '/api/v1/play/record': '/user/record',
+      '/api/like': '/like'
     };
     var qIdx = path.indexOf('?');
     var bare = qIdx >= 0 ? path.substring(0, qIdx) : path;
@@ -607,6 +613,8 @@
     if (typeof index === 'number') {
       STATE.currentIndex = index;
     }
+    // 切歌标记：记录用户切歌动作，contextProvider下次回调时注入提醒给char
+    STATE.justSwitched = { name: song.name, artist: song.artist, time: Date.now() };
     STATE._blobFallbackTried = false;
     STATE.lyrics = [];
     STATE.tlyrics = [];
@@ -889,9 +897,10 @@
   backdrop-filter: blur(28px) saturate(200%);\
   /* 真·胶囊圆角（iPhone 灵动岛风格）*/\
   border-radius: 44px;\
-  /* 多层次精致阴影 + 顶部光泽 */\
+  /* 多层次精致阴影 + 顶部光泽 + 红色环境微光 */\
   box-shadow:\
     0 6px 30px rgba(0, 0, 0, 0.5),\
+    0 2px 16px rgba(194, 12, 12, 0.12),\
     0 0 0 0.5px rgba(255, 255, 255, 0.1),\
     inset 0 0.5px 0 rgba(255, 255, 255, 0.06);\
   color: #fff;\
@@ -924,6 +933,12 @@
   width: 312px;\
   max-width: 312px;\
   border-radius: 32px;\
+  /* 展开态：更强的红色环境光 */\
+  box-shadow:\
+    0 14px 48px rgba(0, 0, 0, 0.58),\
+    0 6px 30px rgba(194, 12, 12, 0.26),\
+    0 0 0 0.5px rgba(255, 255, 255, 0.12),\
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.08);\
 }\
 /* 最小化 */\
 #rmp-island.rmp-island-minimized {\
@@ -1159,8 +1174,8 @@
   backdrop-filter: blur(24px) saturate(180%);\
   border-radius: 18px;\
   box-shadow: 0 8px 36px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(255, 255, 255, 0.08);\
-  max-height: 260px;\
-  overflow-y: auto;\
+  max-height: 300px;\
+  overflow: hidden;\
   -webkit-overflow-scrolling: touch;\
   min-width: 200px;\
   max-width: 270px;\
@@ -1223,6 +1238,52 @@
 }\
 .rmp-island-pl-item.current .rmp-pl-dot {\
   opacity: 1;\
+}\
+/* 弹窗 tab 切换栏 */\
+.rmp-island-popup-tabs {\
+  display: flex;\
+  gap: 0;\
+  padding: 4px 4px 0;\
+  border-bottom: 1px solid rgba(255,255,255,0.06);\
+  margin-bottom: 4px;\
+}\
+.rmp-island-popup-tab {\
+  flex: 1;\
+  text-align: center;\
+  padding: 6px 0;\
+  font-size: 11px;\
+  font-weight: 500;\
+  color: rgba(255,255,255,0.4);\
+  cursor: pointer;\
+  border-radius: 8px 8px 0 0;\
+  transition: color 0.15s ease;\
+  position: relative;\
+}\
+.rmp-island-popup-tab.active {\
+  color: rgba(255,255,255,0.9);\
+}\
+.rmp-island-popup-tab.active::after {\
+  content: "";\
+  position: absolute;\
+  bottom: -1px;\
+  left: 25%;\
+  right: 25%;\
+  height: 2px;\
+  border-radius: 1px;\
+  background: linear-gradient(90deg, #EC4141, #C20C0C);\
+}\
+.rmp-island-popup-content {\
+  max-height: 220px;\
+  overflow-y: auto;\
+  -webkit-overflow-scrolling: touch;\
+}\
+.rmp-island-popup-content::-webkit-scrollbar { width: 3px; }\
+.rmp-island-popup-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }\
+.rmp-island-pl-loading {\
+  text-align: center;\
+  padding: 20px;\
+  font-size: 11px;\
+  color: rgba(255,255,255,0.35);\
 }\
 ';
   }
@@ -1457,26 +1518,23 @@
 
   // 显示长按播放列表浮窗
   function showIslandPlaylistPopup() {
-    if (!STATE.islandPlaylistPopup || STATE.playlist.length === 0) return;
+    if (!STATE.islandPlaylistPopup) return;
+    if (STATE.playlist.length === 0 && !STATE.cookie) return;
     // 获取灵动岛位置
     var islandRect = STATE.islandEl.getBoundingClientRect();
     var popup = STATE.islandPlaylistPopup;
-    // 渲染播放列表项
-    var html = '';
-    for (var i = 0; i < STATE.playlist.length; i++) {
-      var s = STATE.playlist[i];
-      var isCurrent = i === STATE.currentIndex;
-      html += '<div class="rmp-island-pl-item' + (isCurrent ? ' current' : '') + '" data-index="' + i + '">';
-      html += '<span class="rmp-pl-num">' + (isCurrent ? '♪' : (i + 1)) + '</span>';
-      html += '<span class="rmp-pl-name">' + escapeHtml(s.name || '') + ' - ' + escapeHtml(s.artist || '') + '</span>';
-      html += '<span class="rmp-pl-dot"></span>';
-      html += '</div>';
-    }
+    // 渲染 tab + 内容区
+    var html = '<div class="rmp-island-popup-tabs">';
+    html += '<div class="rmp-island-popup-tab active" data-tab="playlist">播放列表</div>';
+    html += '<div class="rmp-island-popup-tab" data-tab="netease">网易云歌单</div>';
+    html += '</div>';
+    html += '<div class="rmp-island-popup-content" id="rmp-island-popup-content"></div>';
     popup.innerHTML = html;
+    // 默认显示播放列表 tab
+    renderPopupPlaylistTab();
     // 定位：灵动岛下方居中
     var top = islandRect.bottom + 8;
     var left = islandRect.left + islandRect.width / 2;
-    // 确保不超出屏幕
     var pw = Math.min(270, islandRect.width + 40);
     popup.style.minWidth = Math.max(180, pw - 20) + 'px';
     popup.style.maxWidth = pw + 'px';
@@ -1488,20 +1546,143 @@
     requestAnimationFrame(function () {
       popup.classList.add('visible');
     });
-    // 点击项目切歌
+    // 事件委托：tab 切换 + 列表项点击
     function onPopupClick(e) {
+      // tab 切换
+      var tab = e.target.closest('.rmp-island-popup-tab');
+      if (tab) {
+        var tabName = tab.getAttribute('data-tab');
+        popup.querySelectorAll('.rmp-island-popup-tab').forEach(function (t) { t.classList.remove('active'); });
+        tab.classList.add('active');
+        if (tabName === 'playlist') renderPopupPlaylistTab();
+        else renderPopupNeteaseTab();
+        return;
+      }
+      // 播放列表项点击
       var item = e.target.closest('.rmp-island-pl-item');
       if (!item) return;
       var idx = parseInt(item.getAttribute('data-index'), 10);
+      var plId = item.getAttribute('data-plid');
+      if (plId) {
+        // 网易云歌单：加载歌曲到本地播放列表
+        loadNeteasePlaylistIntoPopup(plId);
+        return;
+      }
       if (!isNaN(idx) && STATE.playlist[idx]) {
         playSong(STATE.playlist[idx], idx);
+        hideIslandPlaylistPopup();
       }
-      hideIslandPlaylistPopup();
     }
     popup._clickHandler = onPopupClick;
     popup.addEventListener('click', onPopupClick);
-    // 如果灵动岛先被收起了，一并隐藏
     STATE._popupVisible = true;
+  }
+
+  // 渲染弹窗的"播放列表"tab
+  function renderPopupPlaylistTab() {
+    var content = document.getElementById('rmp-island-popup-content');
+    if (!content) return;
+    if (STATE.playlist.length === 0) {
+      content.innerHTML = '<div class="rmp-island-pl-loading">播放列表为空</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < STATE.playlist.length; i++) {
+      var s = STATE.playlist[i];
+      var isCurrent = i === STATE.currentIndex;
+      html += '<div class="rmp-island-pl-item' + (isCurrent ? ' current' : '') + '" data-index="' + i + '">';
+      html += '<span class="rmp-pl-num">' + (isCurrent ? '♪' : (i + 1)) + '</span>';
+      html += '<span class="rmp-pl-name">' + escapeHtml(s.name || '') + ' - ' + escapeHtml(s.artist || '') + '</span>';
+      html += '<span class="rmp-pl-dot"></span>';
+      html += '</div>';
+    }
+    content.innerHTML = html;
+  }
+
+  // 渲染弹窗的"网易云歌单"tab
+  function renderPopupNeteaseTab() {
+    var content = document.getElementById('rmp-island-popup-content');
+    if (!content) return;
+    if (!STATE.cookie) {
+      content.innerHTML = '<div class="rmp-island-pl-loading">请先登录网易云</div>';
+      return;
+    }
+    content.innerHTML = '<div class="rmp-island-pl-loading"><div class="rmp-spinner"></div></div>';
+    // 获取用户歌单列表
+    neteaseApi('/api/nuser/account/get').then(function (resp) {
+      var uid = (resp.profile || {}).userId;
+      if (!uid) { content.innerHTML = '<div class="rmp-island-pl-loading">获取用户信息失败</div>'; return; }
+      return neteaseApi('/api/user/playlist?uid=' + uid + '&limit=30&offset=0');
+    }).then(function (resp) {
+      if (!resp || !resp.playlist) { content.innerHTML = '<div class="rmp-island-pl-loading">暂无歌单</div>'; return; }
+      var list = resp.playlist;
+      var html = '';
+      for (var i = 0; i < list.length; i++) {
+        var pl = list[i];
+        html += '<div class="rmp-island-pl-item" data-plid="' + pl.id + '">';
+        html += '<span class="rmp-pl-num">' + (i + 1) + '</span>';
+        html += '<span class="rmp-pl-name">' + escapeHtml(pl.name || '') + ' (' + (pl.trackCount || 0) + '首)</span>';
+        html += '<span class="rmp-pl-dot"></span>';
+        html += '</div>';
+      }
+      content.innerHTML = html;
+    }).catch(function () {
+      content.innerHTML = '<div class="rmp-island-pl-loading">加载失败</div>';
+    });
+  }
+
+  // 点击网易云歌单后，加载歌曲到本地播放列表并播放第一首
+  function loadNeteasePlaylistIntoPopup(plId) {
+    var content = document.getElementById('rmp-island-popup-content');
+    if (content) content.innerHTML = '<div class="rmp-island-pl-loading"><div class="rmp-spinner"></div></div>';
+    neteaseApi('/api/v6/playlist/detail?id=' + plId).then(function (resp) {
+      var playlist = resp.playlist || {};
+      var tracks = playlist.tracks || [];
+      var plName = playlist.name || '';
+      if (tracks.length === 0) {
+        var trackIds = (playlist.trackIds || []).slice(0, 50);
+        if (trackIds.length > 0) {
+          var ids = trackIds.map(function (t) { return t.id; });
+          return neteaseApi('/api/song/detail?ids=' + JSON.stringify(ids)).then(function (r) {
+            return { songs: r.songs || [], name: plName };
+          });
+        }
+        return { songs: [], name: plName };
+      }
+      return { songs: tracks, name: plName };
+    }).then(function (result) {
+      var tracks = result.songs;
+      var plName = result.name;
+      if (!tracks || tracks.length === 0) {
+        if (content) content.innerHTML = '<div class="rmp-island-pl-loading">歌单为空</div>';
+        return;
+      }
+      // 转换为插件内部歌曲格式并加入播放列表
+      var songs = tracks.map(function (t) {
+        var ar = t.ar || t.artists || [];
+        var al = t.al || t.album || {};
+        return {
+          id: t.id,
+          name: t.name || '',
+          artist: ar.map(function (a) { return a.name; }).join(', '),
+          album: al.name || '',
+          cover: al.picUrl || '',
+          _personal: true
+        };
+      });
+      // 替换当前播放列表
+      STATE.playlist = songs;
+      STATE.currentIndex = -1;
+      savePlaylist();
+      // 播放第一首
+      if (songs.length > 0) {
+        playSong(songs[0], 0);
+      }
+      hideIslandPlaylistPopup();
+      if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('已加载歌单：' + plName);
+    }).catch(function () {
+      if (content) content.innerHTML = '<div class="rmp-island-pl-loading">加载失败</div>';
+    });
   }
 
   // 隐藏播放列表浮窗
@@ -1738,14 +1919,33 @@
   function getAppStyles() {
     return '\
 .roche-music-player {\
+  /* ===== 网易云红毛玻璃 · 设计变量 ===== */\
+  --rmp-red: #C20C0C;\
+  --rmp-red-light: #EC4141;\
+  --rmp-red-gradient: linear-gradient(135deg, #EC4141, #C20C0C);\
+  --rmp-bg-base: #1a1a1f;\
+  --rmp-bg-card: rgba(255,255,255,0.04);\
+  --rmp-bg-glass: rgba(18,18,18,0.6);\
+  --rmp-blur: 24px;\
+  --rmp-text-primary: rgba(255,255,255,0.9);\
+  --rmp-text-secondary: rgba(255,255,255,0.5);\
+  --rmp-text-tertiary: rgba(255,255,255,0.3);\
+  --rmp-border: rgba(255,255,255,0.08);\
+  --rmp-radius: 12px;\
+  --rmp-radius-lg: 18px;\
+  --rmp-shadow: 0 8px 32px rgba(0,0,0,0.4);\
+  --rmp-transition: cubic-bezier(0.16, 1, 0.3, 1);\
   width: 100%;\
   height: 100%;\
   display: flex;\
   flex-direction: column;\
-  background: linear-gradient(165deg, #212126 0%, #151519 45%, #1a1a1f 100%);\
-  -webkit-backdrop-filter: blur(24px);\
-  backdrop-filter: blur(24px);\
-  color: #e0e0e0;\
+  background:\
+    radial-gradient(1200px 600px at 80% -10%, rgba(194,12,12,0.10) 0%, transparent 60%),\
+    radial-gradient(900px 500px at -10% 110%, rgba(236,65,65,0.06) 0%, transparent 60%),\
+    linear-gradient(165deg, #212126 0%, #151519 45%, #1a1a1f 100%);\
+  -webkit-backdrop-filter: blur(var(--rmp-blur)) saturate(160%);\
+  backdrop-filter: blur(var(--rmp-blur)) saturate(160%);\
+  color: var(--rmp-text-primary);\
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;\
   font-size: 14px;\
   overflow: hidden;\
@@ -1753,6 +1953,8 @@
   padding-top: env(safe-area-inset-top);\
   box-sizing: border-box;\
   position: relative;\
+  border: 1px solid var(--rmp-border);\
+  box-shadow: var(--rmp-shadow);\
 }\
 .roche-music-player::before {\
   content: "";\
@@ -1789,17 +1991,17 @@
   padding: 8px 16px;\
   border: none;\
   background: transparent;\
-  color: rgba(255,255,255,0.5);\
+  color: var(--rmp-text-tertiary);\
   font-size: 13px;\
   cursor: pointer;\
   border-radius: 8px 8px 0 0;\
-  transition: color 0.2s ease, background 0.2s ease;\
+  transition: color 0.25s var(--rmp-transition), background 0.25s var(--rmp-transition);\
   white-space: nowrap;\
   flex-shrink: 0;\
   position: relative;\
 }\
 .rmp-tab:hover {\
-  color: rgba(255,255,255,0.85);\
+  color: rgba(255,255,255,0.78);\
   background: rgba(255,255,255,0.04);\
 }\
 .rmp-tab.active {\
@@ -1811,9 +2013,10 @@
   position: absolute;\
   bottom: -1px; left: 50%;\
   transform: translateX(-50%);\
-  width: 24px; height: 2px;\
-  background: #C20C0C;\
-  border-radius: 1px;\
+  width: 28px; height: 2.5px;\
+  background: var(--rmp-red-gradient);\
+  border-radius: 2px;\
+  box-shadow: 0 0 10px rgba(194,12,12,0.6), 0 2px 6px rgba(236,65,65,0.35);\
 }\
 .rmp-panels {\
   flex: 1;\
@@ -1827,11 +2030,37 @@
 .rmp-panel { display: none; }\
 .rmp-panel.active { display: block; }\
 .rmp-card {\
-  background: rgba(255, 255, 255, 0.04);\
-  border-radius: 16px;\
+  background: var(--rmp-bg-card);\
+  border-radius: var(--rmp-radius-lg);\
   padding: 16px;\
   margin-bottom: 12px;\
-  border: 1px solid rgba(255, 255, 255, 0.06);\
+  border: 1px solid var(--rmp-border);\
+  -webkit-backdrop-filter: blur(14px) saturate(140%);\
+  backdrop-filter: blur(14px) saturate(140%);\
+  box-shadow: 0 4px 18px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04);\
+  position: relative;\
+  transition: border-color 0.3s var(--rmp-transition), box-shadow 0.3s var(--rmp-transition), transform 0.3s var(--rmp-transition);\
+}\
+.rmp-card::before {\
+  content: "";\
+  position: absolute;\
+  inset: 0;\
+  border-radius: inherit;\
+  padding: 1px;\
+  background: linear-gradient(135deg, rgba(236,65,65,0.32), rgba(194,12,12,0.08) 40%, transparent 70%);\
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);\
+  -webkit-mask-composite: xor;\
+  mask-composite: exclude;\
+  opacity: 0.55;\
+  pointer-events: none;\
+  transition: opacity 0.3s var(--rmp-transition);\
+}\
+.rmp-card:hover {\
+  border-color: rgba(236,65,65,0.22);\
+  box-shadow: 0 8px 28px rgba(0,0,0,0.32), 0 0 0 1px rgba(236,65,65,0.10), inset 0 1px 0 rgba(255,255,255,0.06);\
+}\
+.rmp-card:hover::before {\
+  opacity: 0.95;\
 }\
 .rmp-search-bar {\
   display: flex;\
@@ -1872,23 +2101,23 @@
 .rmp-select option { background: #202024; color: #fff; }\
 .rmp-btn {\
   padding: 10px 18px;\
-  background: linear-gradient(90deg, #EC4141 0%, #C20C0C 100%);\
+  background: linear-gradient(135deg, #EC4141 0%, #C20C0C 100%);\
   color: #fff;\
   border: none;\
   border-radius: 999px;\
   font-size: 14px;\
   font-weight: 600;\
   cursor: pointer;\
-  transition: all 0.2s ease;\
+  transition: all 0.22s var(--rmp-transition);\
   min-height: 44px;\
   display: inline-flex;\
   align-items: center;\
   justify-content: center;\
   gap: 6px;\
-  box-shadow: 0 6px 18px rgba(194,12,12,0.32);\
+  box-shadow: 0 6px 18px rgba(194,12,12,0.32), inset 0 1px 0 rgba(255,255,255,0.18);\
 }\
-.rmp-btn:hover { background: linear-gradient(90deg, #f45555 0%, #d41414 100%); box-shadow: 0 8px 26px rgba(194,12,12,0.45); transform: translateY(-1px); }\
-.rmp-btn:active { transform: translateY(0) scale(0.98); }\
+.rmp-btn:hover { background: linear-gradient(135deg, #f45555 0%, #d41414 100%); box-shadow: 0 8px 26px rgba(194,12,12,0.45), inset 0 1px 0 rgba(255,255,255,0.22); transform: translateY(-1px); }\
+.rmp-btn:active { transform: translateY(0) scale(0.97); }\
 .rmp-btn-secondary {\
   background: rgba(255, 255, 255, 0.08);\
   color: #e0e0e0;\
@@ -1925,12 +2154,27 @@
   padding: 10px 12px;\
   border-radius: 8px;\
   cursor: pointer;\
-  transition: background 0.2s ease, transform 0.1s ease;\
+  transition: background 0.22s var(--rmp-transition), transform 0.12s var(--rmp-transition), box-shadow 0.22s var(--rmp-transition);\
   min-height: 44px;\
   position: relative;\
 }\
+.rmp-song-item::before {\
+  content: "";\
+  position: absolute;\
+  left: 0; top: 50%;\
+  transform: translateY(-50%);\
+  width: 3px; height: 60%;\
+  background: var(--rmp-red-gradient);\
+  border-radius: 0 2px 2px 0;\
+  opacity: 0;\
+  box-shadow: 0 0 8px rgba(194,12,12,0.5);\
+  transition: opacity 0.22s var(--rmp-transition), box-shadow 0.22s var(--rmp-transition);\
+}\
 .rmp-song-item:hover {\
   background: rgba(255, 255, 255, 0.06);\
+}\
+.rmp-song-item:hover::before {\
+  opacity: 0.65;\
 }\
 .rmp-song-item:active {\
   transform: scale(0.99);\
@@ -1939,14 +2183,9 @@
   background: rgba(194, 12, 12, 0.12);\
 }\
 .rmp-song-item.playing::before {\
-  content: "";\
-  position: absolute;\
-  left: 0; top: 50%;\
-  transform: translateY(-50%);\
-  width: 3px; height: 60%;\
-  background: linear-gradient(180deg, #EC4141, #C20C0C);\
-  border-radius: 0 2px 2px 0;\
-  box-shadow: 0 0 8px rgba(194,12,12,0.7);\
+  opacity: 1;\
+  height: 70%;\
+  box-shadow: 0 0 10px rgba(194,12,12,0.8), 0 0 4px rgba(236,65,65,0.6);\
 }\
 .rmp-song-cover {\
   width: 44px;\
@@ -2063,9 +2302,15 @@
   height: 200px;\
   border-radius: 50%;\
   object-fit: cover;\
-  box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 0 8px rgba(255,255,255,0.04), 0 0 0 9px rgba(194,12,12,0.20);\
+  box-shadow:\
+    0 24px 60px rgba(0,0,0,0.6),\
+    0 12px 28px rgba(194,12,12,0.18),\
+    0 0 0 8px rgba(255,255,255,0.04),\
+    0 0 0 9px rgba(194,12,12,0.22),\
+    inset 0 2px 4px rgba(255,255,255,0.08),\
+    inset 0 -8px 24px rgba(0,0,0,0.4);\
   background: rgba(255,255,255,0.06);\
-  transition: border-radius 0.4s ease;\
+  transition: border-radius 0.4s ease, box-shadow 0.5s var(--rmp-transition);\
 }\
 .rmp-np-cover.playing {\
   animation: rmp-vinyl-spin 20s linear infinite;\
@@ -2167,15 +2412,21 @@
   min-width: 48px;\
   min-height: 48px;\
 }\
+.rmp-controls .rmp-btn-icon:active { transform: scale(0.9); }\
 .rmp-controls .rmp-btn-icon.large {\
   min-width: 56px;\
   min-height: 56px;\
-  background: #C20C0C;\
-  color: #1a1a2e;\
+  background: var(--rmp-red-gradient);\
+  color: #fff;\
+  box-shadow: 0 8px 24px rgba(194,12,12,0.5), 0 0 0 1px rgba(255,255,255,0.08) inset;\
 }\
 .rmp-controls .rmp-btn-icon.large:hover {\
-  background: #f5d982;\
-  transform: scale(1.05);\
+  background: linear-gradient(135deg, #f45555, #d41414);\
+  transform: scale(1.06);\
+  box-shadow: 0 10px 30px rgba(194,12,12,0.62), 0 0 0 1px rgba(255,255,255,0.12) inset;\
+}\
+.rmp-controls .rmp-btn-icon.large:active {\
+  transform: scale(0.92);\
 }\
 .rmp-volume-bar {\
   display: flex;\
@@ -2220,6 +2471,9 @@
   -webkit-overflow-scrolling: touch;\
   mask-image: linear-gradient(to bottom, transparent, #000 15%, #000 85%, transparent);\
   -webkit-mask-image: linear-gradient(to bottom, transparent, #000 15%, #000 85%, transparent);\
+  background: linear-gradient(180deg, rgba(194,12,12,0.045) 0%, rgba(194,12,12,0.015) 50%, rgba(194,12,12,0.045) 100%);\
+  border-radius: var(--rmp-radius);\
+  position: relative;\
 }\
 .rmp-lyrics-container::-webkit-scrollbar { display: none; }\
 .rmp-lyric-line {\
@@ -2267,28 +2521,31 @@
   font-size: 14px;\
 }\
 .rmp-settings-group {\
-  margin-bottom: 16px;\
+  margin-bottom: 18px;\
 }\
 .rmp-settings-label {\
   display: block;\
   font-size: 13px;\
-  color: rgba(255,255,255,0.5);\
-  margin-bottom: 6px;\
+  color: var(--rmp-text-secondary);\
+  margin-bottom: 8px;\
+  letter-spacing: 0.2px;\
 }\
 .rmp-settings-input {\
   width: 100%;\
-  padding: 10px 14px;\
-  background: rgba(255, 255, 255, 0.06);\
-  border: 1px solid rgba(255, 255, 255, 0.1);\
-  border-radius: 12px;\
+  padding: 11px 14px;\
+  background: rgba(255, 255, 255, 0.05);\
+  border: 1px solid var(--rmp-border);\
+  border-radius: var(--rmp-radius);\
   color: #fff;\
   font-size: 14px;\
   outline: none;\
   box-sizing: border-box;\
-  transition: border-color 0.2s;\
+  transition: border-color 0.25s var(--rmp-transition), box-shadow 0.25s var(--rmp-transition), background 0.25s var(--rmp-transition);\
 }\
 .rmp-settings-input:focus {\
-  border-color: #C20C0C;\
+  border-color: var(--rmp-red);\
+  background: rgba(255, 255, 255, 0.07);\
+  box-shadow: 0 0 0 3px rgba(194,12,12,0.18), 0 0 12px rgba(236,65,65,0.22);\
 }\
 .rmp-settings-input::placeholder { color: rgba(255,255,255,0.3); }\
 .rmp-login-area {\
@@ -2703,13 +2960,27 @@
 .rmp-netease-playlists { display: flex; flex-direction: column; gap: 8px; }\
 .rmp-netease-pl-item {\
   display: flex; align-items: center; gap: 12px; padding: 10px;\
-  border-radius: 10px; cursor: pointer; transition: background 0.2s;\
+  border-radius: var(--rmp-radius); cursor: pointer;\
+  transition: transform 0.25s var(--rmp-transition), background 0.25s var(--rmp-transition), box-shadow 0.25s var(--rmp-transition), border-color 0.25s var(--rmp-transition);\
   background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.04);\
+  -webkit-backdrop-filter: blur(10px);\
+  backdrop-filter: blur(10px);\
 }\
-.rmp-netease-pl-item:hover { background: rgba(255,255,255,0.06); }\
+.rmp-netease-pl-item:hover {\
+  background: rgba(255,255,255,0.06);\
+  border-color: rgba(236,65,65,0.28);\
+  transform: translateY(-2px) scale(1.012);\
+  box-shadow: 0 10px 26px rgba(0,0,0,0.32), 0 0 0 1px rgba(236,65,65,0.10);\
+}\
+.rmp-netease-pl-item:active { transform: translateY(0) scale(0.99); }\
 .rmp-netease-pl-cover {\
   width: 52px; height: 52px; border-radius: 8px; object-fit: cover;\
   background: rgba(255,255,255,0.06); flex-shrink: 0;\
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);\
+  transition: box-shadow 0.25s var(--rmp-transition);\
+}\
+.rmp-netease-pl-item:hover .rmp-netease-pl-cover {\
+  box-shadow: 0 6px 18px rgba(194,12,12,0.28);\
 }\
 .rmp-netease-pl-info { flex: 1; min-width: 0; }\
 .rmp-netease-pl-name {\
@@ -4162,6 +4433,13 @@
 
     var song = STATE.currentSong;
     var result = '【user当前正在听音乐】\n';
+
+    // 切歌提醒：如果用户刚刚通过灵动岛切歌，在注入内容开头提醒char
+    if (STATE.justSwitched && (Date.now() - STATE.justSwitched.time) < 120000) {
+      result += '（user刚刚切换了歌曲为《' + (STATE.justSwitched.name || '未知') + '》— ' + (STATE.justSwitched.artist || '未知') + '）\n';
+    }
+    STATE.justSwitched = null;
+
     result += '歌曲：《' + (song.name || '未知') + '》\n';
     result += '歌手：' + (song.artist || '未知') + '\n';
     result += '专辑：' + (song.album || '未知') + '\n';
@@ -4250,7 +4528,7 @@
     chat: {
       scope: { conversationTypes: ['direct', 'group'] },
       // 点歌方式：工具调用（声明 play_song 工具，char 调用即可点歌）
-      promptOnly: '你具有音乐点歌能力。当你想让 user 听某首歌时，调用 play_song 工具（参数：song 歌名，artist 歌手可选）搜索并播放。调用后可以正常说话，user 会看到歌曲切换。同时你能感知 user 当前正在听的音乐内容（如果已注入）。',
+      promptOnly: '你具有音乐点歌能力。可用工具：play_song（点歌播放）、search_music（搜索歌曲查看结果）、view_playlist（查看user歌单或歌单内歌曲）、create_playlist（创建新歌单）、add_to_playlist（收藏歌曲到歌单）、remove_from_playlist（从歌单删除歌曲）、play_history（查看user听歌记录）、like_song（红心收藏歌曲）、daily_recommend（获取每日推荐歌曲）。user 当前正在听的音乐内容会自动注入你的上下文。',
       contextProvider: contextProvider,
       tools: [{
         id: 'play_song',
@@ -4308,6 +4586,170 @@
             return playBest(pickBest(songs));
           }).catch(function (e) {
             return { success: false, message: e.message || '网易云搜索失败' };
+          });
+        }
+      }, {
+        // 搜索歌曲（仅查看结果，不播放）
+        id: 'search_music',
+        description: '搜索网易云音乐曲库，返回歌曲列表供查看。不自动播放。',
+        parameters: { keyword: 'string', limit: 'number' },
+        execute: function (args, ctx) {
+          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
+          var kw = String((args && args.keyword) || '');
+          var limit = Math.min(parseInt((args && args.limit) || '10', 10) || 10, 30);
+          if (!kw) return Promise.resolve({ error: 'missing keyword' });
+          return neteaseApi('/api/search/get?s=' + encodeURIComponent(kw) + '&type=1&limit=' + limit).then(function (resp) {
+            var result = resp.result || {};
+            var songs = (result.songs || []).map(function (s) {
+              var ar = s.artists || s.ar || [];
+              var al = s.album || s.al || {};
+              return { id: s.id, name: s.name, artist: ar.map(function (a) { return a.name; }).join('/'), album: al.name || '' };
+            });
+            return { success: true, total: songs.length, songs: songs };
+          }).catch(function (e) {
+            return { success: false, message: e.message || '搜索失败' };
+          });
+        }
+      }, {
+        // 查看用户歌单或歌单详情
+        id: 'view_playlist',
+        description: '查看 user 的网易云歌单列表，或查看某个歌单的歌曲详情。不传 playlist_id 时返回歌单列表。',
+        parameters: { playlist_id: 'string' },
+        execute: function (args, ctx) {
+          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
+          var plId = args && args.playlist_id ? String(args.playlist_id) : '';
+          if (!plId) {
+            // 返回歌单列表
+            return neteaseApi('/api/nuser/account/get').then(function (resp) {
+              var uid = (resp.profile || {}).userId;
+              if (!uid) return { success: false, message: '获取用户信息失败' };
+              return neteaseApi('/api/user/playlist?uid=' + uid + '&limit=50&offset=0');
+            }).then(function (resp) {
+              if (!resp || !resp.playlist) return { success: false, message: '获取歌单失败' };
+              var list = resp.playlist.map(function (pl) {
+                return { id: pl.id, name: pl.name, track_count: pl.trackCount || 0 };
+              });
+              return { success: true, total: list.length, playlists: list };
+            }).catch(function (e) {
+              return { success: false, message: e.message || '获取歌单失败' };
+            });
+          }
+          // 返回歌单详情
+          return neteaseApi('/api/v6/playlist/detail?id=' + plId).then(function (resp) {
+            var pl = resp.playlist || {};
+            var tracks = (pl.tracks || []).map(function (t) {
+              var ar = t.ar || t.artists || [];
+              return { id: t.id, name: t.name, artist: ar.map(function (a) { return a.name; }).join('/') };
+            });
+            return { success: true, name: pl.name, song_count: tracks.length, songs: tracks };
+          }).catch(function (e) {
+            return { success: false, message: e.message || '获取歌单详情失败' };
+          });
+        }
+      }, {
+        // 创建歌单
+        id: 'create_playlist',
+        description: '为 user 创建一个新的网易云歌单。',
+        parameters: { name: 'string' },
+        execute: function (args, ctx) {
+          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
+          var name = String((args && args.name) || '');
+          if (!name) return Promise.resolve({ error: 'missing playlist name' });
+          return neteaseApi('/api/playlist/create?name=' + encodeURIComponent(name), {}, 'POST').then(function (resp) {
+            var pl = resp.playlist || {};
+            return { success: true, id: pl.id, name: pl.name, message: '歌单「' + name + '」创建成功' };
+          }).catch(function (e) {
+            return { success: false, message: e.message || '创建歌单失败' };
+          });
+        }
+      }, {
+        // 收藏歌曲到歌单
+        id: 'add_to_playlist',
+        description: '将一首歌添加到 user 的指定网易云歌单中。',
+        parameters: { song_id: 'string', playlist_id: 'string' },
+        execute: function (args, ctx) {
+          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
+          var songId = String((args && args.song_id) || '');
+          var plId = String((args && args.playlist_id) || '');
+          if (!songId || !plId) return Promise.resolve({ error: 'missing song_id or playlist_id' });
+          return neteaseApi('/api/playlist/tracks?op=add&pid=' + plId + '&tracks=' + songId, {}, 'POST').then(function (resp) {
+            return { success: true, message: '歌曲已添加到歌单', body: resp.body || resp };
+          }).catch(function (e) {
+            return { success: false, message: e.message || '添加失败，歌曲可能已在歌单中' };
+          });
+        }
+      }, {
+        // 从歌单删除歌曲
+        id: 'remove_from_playlist',
+        description: '从 user 的指定网易云歌单中删除一首歌。',
+        parameters: { song_id: 'string', playlist_id: 'string' },
+        execute: function (args, ctx) {
+          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
+          var songId = String((args && args.song_id) || '');
+          var plId = String((args && args.playlist_id) || '');
+          if (!songId || !plId) return Promise.resolve({ error: 'missing song_id or playlist_id' });
+          return neteaseApi('/api/playlist/tracks?op=del&pid=' + plId + '&tracks=' + songId, {}, 'POST').then(function (resp) {
+            return { success: true, message: '歌曲已从歌单删除', body: resp.body || resp };
+          }).catch(function (e) {
+            return { success: false, message: e.message || '删除失败' };
+          });
+        }
+      }, {
+        // 听歌记录
+        id: 'play_history',
+        description: '查看 user 的网易云听歌记录。type=1 为最近一周，type=0 为全部。',
+        parameters: { type: 'number' },
+        execute: function (args, ctx) {
+          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
+          var type = parseInt((args && args.type) || '1', 10);
+          return neteaseApi('/api/nuser/account/get').then(function (resp) {
+            var uid = (resp.profile || {}).userId;
+            if (!uid) return { success: false, message: '获取用户信息失败' };
+            return neteaseApi('/api/v1/play/record?uid=' + uid + '&type=' + type + '&limit=50');
+          }).then(function (resp) {
+            if (!resp) return { success: false, message: '获取记录失败' };
+            var list = (resp.allData || resp.weekData || []).map(function (item) {
+              var song = item.song || {};
+              var ar = song.ar || song.artists || [];
+              return { id: song.id, name: song.name, artist: ar.map(function (a) { return a.name; }).join('/'), play_count: item.playCount || 0 };
+            });
+            return { success: true, total: list.length, songs: list };
+          }).catch(function (e) {
+            return { success: false, message: e.message || '获取听歌记录失败' };
+          });
+        }
+      }, {
+        // 红心收藏歌曲
+        id: 'like_song',
+        description: '红心收藏一首网易云歌曲（添加到"我喜欢的音乐"）。',
+        parameters: { song_id: 'string' },
+        execute: function (args, ctx) {
+          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
+          var songId = String((args && args.song_id) || '');
+          if (!songId) return Promise.resolve({ error: 'missing song_id' });
+          return neteaseApi('/api/like?trackId=' + songId + '&like=true', {}, 'POST').then(function (resp) {
+            return { success: true, message: '已红心收藏', body: resp };
+          }).catch(function (e) {
+            return { success: false, message: e.message || '收藏失败' };
+          });
+        }
+      }, {
+        // 每日推荐
+        id: 'daily_recommend',
+        description: '获取 user 的网易云每日推荐歌曲列表。',
+        parameters: {},
+        execute: function (args, ctx) {
+          if (!STATE.cookie) return Promise.resolve({ success: false, message: '请先登录网易云' });
+          return neteaseApi('/api/v3/discovery/recommend/songs', {}, 'POST').then(function (resp) {
+            var data = resp.data || {};
+            var list = (data.dailySongs || []).map(function (s) {
+              var ar = s.ar || s.artists || [];
+              var al = s.al || s.album || {};
+              return { id: s.id, name: s.name, artist: ar.map(function (a) { return a.name; }).join('/'), album: al.name || '' };
+            });
+            return { success: true, total: list.length, songs: list };
+          }).catch(function (e) {
+            return { success: false, message: e.message || '获取每日推荐失败' };
           });
         }
       }]
