@@ -232,6 +232,8 @@
     }
     var params = [];
     if (queryStr) params.push(queryStr);
+    // 加 timestamp 绕过 Netlify/Vercel CDN 缓存
+    params.push('timestamp=' + Date.now());
     if (STATE.cookie && method === 'GET') params.push('cookie=' + encodeURIComponent(STATE.cookie));
     var url = base + ncmPath + (params.length ? '?' + params.join('&') : '');
     var fetchOpts = { method: method, headers: { 'Accept': 'application/json' } };
@@ -4419,8 +4421,11 @@
   // Cookie 从用户自己的实例返回，只存用户本地，不经过任何第三方服务器
   function startNcmQrLogin(ncmBase, overlay, qrImg, qrPlaceholder, qrStatus) {
     function ncmGet(path) {
-      console.log('[扫码登录 ncmGet]', path);
-      return fetch(ncmBase + path).then(function (r) {
+      // 加 timestamp 参数绕过 Netlify CDN 缓存（否则 check 接口会一直返回缓存的 801）
+      var sep = path.indexOf('?') >= 0 ? '&' : '?';
+      var noCacheUrl = ncmBase + path + sep + 'timestamp=' + Date.now();
+      console.log('[扫码登录 ncmGet]', noCacheUrl);
+      return fetch(noCacheUrl).then(function (r) {
         return r.text().then(function (text) {
           console.log('[扫码登录 check 原始返回]', text.substring(0, 500));
           try { return JSON.parse(text); }
