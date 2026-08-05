@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "网易云音乐",
-  "version": "3.4.0",
-  "description": "v3.4.0：日间/夜间双模式 - CSS变量驱动+设置页开关+正在播放日间浅色版+夜间深色毛玻璃+歌词同步修复",
+  "version": "3.4.1",
+  "description": "v3.4.1：修复扫码登录切出Roche后台挂起导致错过802/803 - 加visibilitychange监听切回立即check",
   "author": "Roche",
-  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@a0f7be6/music-player.js",
+  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@b566afb/music-player.js",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
