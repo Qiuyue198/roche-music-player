@@ -4,7 +4,7 @@
   "version": "3.0.0",
   "description": "v3.0.0：新增8个AI工具（搜索/歌单/建歌单/加歌/删歌/听歌记录/收藏/每日推荐）、灵动岛弹窗tab切换网易云歌单、切歌注入提醒、网易云红毛玻璃风格全面美化",
   "author": "Roche",
-  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@84a2d5b/music-player.js",
+  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@47c1686/music-player.js",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
