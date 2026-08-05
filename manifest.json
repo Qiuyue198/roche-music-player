@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "网易云音乐",
-  "version": "3.4.4",
-  "description": "v3.4.4：修复扫码登录CDN缓存导致check一直801 - 加timestamp参数绕过Netlify缓存",
+  "version": "3.4.5",
+  "description": "v3.4.5：扫码登录加 realIP 参数绕过海外节点风控 - 修复APK端扫码确认后check拿不到803",
   "author": "Roche",
-  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@b38a29c/music-player.js",
+  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@664b034/music-player.js",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
