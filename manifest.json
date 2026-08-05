@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "网易云音乐",
-  "version": "3.1.0",
-  "description": "v3.1.0：删除公共API回退强制自部署、修复退出登录cookie残留、扫码登录加过期重试、8个AI工具前端UI、灵动岛歌单tab、网易云红毛玻璃风格",
+  "version": "3.2.0",
+  "description": "v3.2.0：网易云App端风格全面重做 - 白色小清新主面板+黑胶唱片播放页+灵动岛网易云红毛玻璃+修复歌词同步bug",
   "author": "Roche",
-  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@844c17d/music-player.js",
+  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@156d133/music-player.js",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
