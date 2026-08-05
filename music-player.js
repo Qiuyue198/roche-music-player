@@ -832,7 +832,7 @@
   z-index: 99999;\
   box-sizing: border-box;\
   /* 网易云红毛玻璃质感 */\
-  background: linear-gradient(135deg, rgba(194,12,12,0.85) 0%, rgba(160,8,8,0.85) 100%);\
+  background: linear-gradient(135deg, #C20C0C 0%, #EC4141 100%);\
   -webkit-backdrop-filter: blur(20px) saturate(180%);\
   backdrop-filter: blur(20px) saturate(180%);\
   /* 真·胶囊圆角（iPhone 灵动岛风格）*/\
@@ -1109,7 +1109,7 @@
 .rmp-island-playlist-popup {\
   position: fixed;\
   z-index: 99998;\
-  background: linear-gradient(135deg, rgba(194,12,12,0.92) 0%, rgba(150,8,8,0.92) 100%);\
+  background: linear-gradient(135deg, rgba(194,12,12,0.92) 0%, rgba(236,65,65,0.92) 100%);\
   -webkit-backdrop-filter: blur(24px) saturate(180%);\
   backdrop-filter: blur(24px) saturate(180%);\
   border-radius: 18px;\
@@ -1866,12 +1866,11 @@
   --rmp-red-gradient: linear-gradient(135deg, #EC4141, #C20C0C);\
   --rmp-bg-base: #f5f5f7;\
   --rmp-bg-card: #ffffff;\
-  --rmp-bg-glass: rgba(255,255,255,0.72);\
-  --rmp-blur: 20px;\
+  --rmp-bg-group: #f7f7f7;\
   --rmp-text-primary: #333333;\
-  --rmp-text-secondary: #999999;\
+  --rmp-text-secondary: #888888;\
   --rmp-text-tertiary: #bbbbbb;\
-  --rmp-border: rgba(0,0,0,0.06);\
+  --rmp-border: #eaeaea;\
   --rmp-radius: 8px;\
   --rmp-radius-lg: 12px;\
   --rmp-shadow: 0 2px 12px rgba(0,0,0,0.06);\
@@ -1880,12 +1879,8 @@
   height: 100%;\
   display: flex;\
   flex-direction: column;\
-  background:\
-    radial-gradient(1000px 500px at 85% -10%, rgba(194,12,12,0.04) 0%, transparent 60%),\
-    radial-gradient(800px 400px at -10% 110%, rgba(236,65,65,0.03) 0%, transparent 60%),\
-    #f5f5f7;\
-  -webkit-backdrop-filter: blur(var(--rmp-blur)) saturate(140%);\
-  backdrop-filter: blur(var(--rmp-blur)) saturate(140%);\
+  /* 纯色背景，App 端不使用毛玻璃/光晕装饰 */\
+  background: #f5f5f7;\
   color: var(--rmp-text-primary);\
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;\
   font-size: 14px;\
@@ -1896,26 +1891,6 @@
   position: relative;\
   border: 1px solid var(--rmp-border);\
   box-shadow: var(--rmp-shadow);\
-}\
-.roche-music-player::before {\
-  content: "";\
-  position: absolute;\
-  top: -40%; right: -20%;\
-  width: 60%; height: 60%;\
-  border-radius: 50%;\
-  background: radial-gradient(circle, rgba(194,12,12,0.05) 0%, transparent 70%);\
-  pointer-events: none;\
-  z-index: 0;\
-}\
-.roche-music-player::after {\
-  content: "";\
-  position: absolute;\
-  bottom: -30%; left: -15%;\
-  width: 50%; height: 50%;\
-  border-radius: 50%;\
-  background: radial-gradient(circle, rgba(230,0,38,0.03) 0%, transparent 70%);\
-  pointer-events: none;\
-  z-index: 0;\
 }\
 .roche-music-player > * { position: relative; z-index: 1; }\
 .rmp-tabs {\
@@ -1932,21 +1907,20 @@
   padding: 8px 16px;\
   border: none;\
   background: transparent;\
-  color: var(--rmp-text-tertiary);\
+  color: #888888;\
   font-size: 13px;\
   cursor: pointer;\
-  border-radius: 8px 8px 0 0;\
-  transition: color 0.25s var(--rmp-transition), background 0.25s var(--rmp-transition);\
+  border-radius: 0;\
+  transition: color 0.25s var(--rmp-transition);\
   white-space: nowrap;\
   flex-shrink: 0;\
   position: relative;\
 }\
 .rmp-tab:hover {\
   color: var(--rmp-text-secondary);\
-  background: rgba(0,0,0,0.03);\
 }\
 .rmp-tab.active {\
-  color: var(--rmp-red);\
+  color: #C20C0C;\
   background: transparent;\
   font-weight: 600;\
 }\
@@ -1955,10 +1929,9 @@
   position: absolute;\
   bottom: -1px; left: 50%;\
   transform: translateX(-50%);\
-  width: 28px; height: 2.5px;\
-  background: var(--rmp-red-gradient);\
+  width: 24px; height: 3px;\
+  background: #C20C0C;\
   border-radius: 2px;\
-  box-shadow: 0 0 6px rgba(194,12,12,0.4);\
 }\
 .rmp-panels {\
   flex: 1;\
@@ -1977,32 +1950,13 @@
   padding: 16px;\
   margin-bottom: 12px;\
   border: 1px solid var(--rmp-border);\
-  -webkit-backdrop-filter: blur(14px) saturate(140%);\
-  backdrop-filter: blur(14px) saturate(140%);\
   box-shadow: 0 2px 12px rgba(0,0,0,0.06);\
   position: relative;\
-  transition: border-color 0.3s var(--rmp-transition), box-shadow 0.3s var(--rmp-transition), transform 0.3s var(--rmp-transition);\
-}\
-.rmp-card::before {\
-  content: "";\
-  position: absolute;\
-  inset: 0;\
-  border-radius: inherit;\
-  padding: 1px;\
-  background: linear-gradient(135deg, rgba(236,65,65,0.18), rgba(194,12,12,0.04) 40%, transparent 70%);\
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);\
-  -webkit-mask-composite: xor;\
-  mask-composite: exclude;\
-  opacity: 0.4;\
-  pointer-events: none;\
-  transition: opacity 0.3s var(--rmp-transition);\
+  transition: border-color 0.3s var(--rmp-transition), box-shadow 0.3s var(--rmp-transition);\
 }\
 .rmp-card:hover {\
-  border-color: rgba(236,65,65,0.18);\
-  box-shadow: 0 4px 18px rgba(0,0,0,0.08), 0 0 0 1px rgba(236,65,65,0.08);\
-}\
-.rmp-card:hover::before {\
-  opacity: 0.8;\
+  border-color: #d8d8d8;\
+  box-shadow: 0 4px 18px rgba(0,0,0,0.08);\
 }\
 .rmp-search-bar {\
   display: flex;\
@@ -2014,8 +1968,8 @@
   flex: 1;\
   min-width: 160px;\
   padding: 10px 16px;\
-  background: #fff;\
-  border: 1px solid rgba(0,0,0,0.08);\
+  background: #f5f5f7;\
+  border: 1px solid transparent;\
   border-radius: 999px;\
   color: var(--rmp-text-primary);\
   font-size: 14px;\
@@ -2094,45 +2048,26 @@
   align-items: center;\
   gap: 10px;\
   padding: 10px 12px;\
-  border-radius: 8px;\
+  border-radius: 6px;\
   cursor: pointer;\
-  transition: background 0.22s var(--rmp-transition), transform 0.12s var(--rmp-transition), box-shadow 0.22s var(--rmp-transition);\
+  background: #fff;\
+  transition: background 0.18s ease;\
   min-height: 44px;\
   position: relative;\
 }\
-.rmp-song-item::before {\
-  content: "";\
-  position: absolute;\
-  left: 0; top: 50%;\
-  transform: translateY(-50%);\
-  width: 3px; height: 60%;\
-  background: var(--rmp-red-gradient);\
-  border-radius: 0 2px 2px 0;\
-  opacity: 0;\
-  box-shadow: 0 0 6px rgba(194,12,12,0.4);\
-  transition: opacity 0.22s var(--rmp-transition), box-shadow 0.22s var(--rmp-transition);\
-}\
 .rmp-song-item:hover {\
-  background: #f5f5f5;\
-}\
-.rmp-song-item:hover::before {\
-  opacity: 0.65;\
+  background: #f5f5f7;\
 }\
 .rmp-song-item:active {\
-  transform: scale(0.99);\
+  background: #ececee;\
 }\
 .rmp-song-item.playing {\
-  background: rgba(194, 12, 12, 0.08);\
-}\
-.rmp-song-item.playing::before {\
-  opacity: 1;\
-  height: 70%;\
-  box-shadow: 0 0 8px rgba(194,12,12,0.5);\
+  background: #f5f5f7;\
 }\
 .rmp-song-cover {\
-  width: 44px;\
-  height: 44px;\
-  border-radius: 8px;\
+  width: 40px;\
+  height: 40px;\
+  border-radius: 4px;\
   object-fit: cover;\
   flex-shrink: 0;\
   background: #f0f0f2;\
@@ -2205,13 +2140,11 @@
   flex-direction: column;\
   align-items: center;\
   gap: 16px;\
-  /* 黑胶沉浸式深色背景 */\
+  /* 黑胶沉浸式深色背景：纯黑 + 模糊封面蒙层由 .rmp-np-vinyl-bg 提供 */\
   position: relative;\
   padding: 24px 16px;\
   border-radius: var(--rmp-radius-lg);\
-  background:\
-    radial-gradient(circle at 50% 0%, rgba(194,12,12,0.18) 0%, transparent 55%),\
-    linear-gradient(180deg, #1f1f24 0%, #151519 60%, #0d0d10 100%);\
+  background: #1a1a1a;\
   overflow: hidden;\
   color: #fff;\
 }\
@@ -2270,9 +2203,9 @@
   width: 100%;\
   height: 100%;\
   border-radius: 50%;\
-  /* 径向渐变模拟黑胶纹路 */\
+  /* 径向渐变模拟黑胶纹路：纹路 #2A2A2A，底色 #1A1A1A */\
   background:\
-    repeating-radial-gradient(circle at center, #0a0a0a 0px, #0a0a0a 2px, #161616 3px, #0a0a0a 4px),\
+    repeating-radial-gradient(circle at center, #0a0a0a 0px, #0a0a0a 2px, #2a2a2a 3px, #0a0a0a 4px),\
     radial-gradient(circle at center, #1a1a1a 0%, #050505 100%);\
   box-shadow:\
     0 24px 60px rgba(0,0,0,0.7),\
@@ -2529,8 +2462,8 @@
 .rmp-settings-input {\
   width: 100%;\
   padding: 11px 14px;\
-  background: #fff;\
-  border: 1px solid var(--rmp-border);\
+  background: #f5f5f7;\
+  border: 1px solid transparent;\
   border-radius: var(--rmp-radius);\
   color: var(--rmp-text-primary);\
   font-size: 14px;\
@@ -2580,14 +2513,14 @@
   max-width: 280px;\
   line-height: 1.5;\
 }\
-/* 用户卡片（已登录状态）*/\
+/* 用户卡片（已登录状态）：纯白卡片 */\
 .rmp-user-card {\
   display: flex;\
   align-items: center;\
   gap: 14px;\
   padding: 16px;\
-  background: rgba(194,12,12,0.05);\
-  border: 1px solid rgba(194,12,12,0.14);\
+  background: #ffffff;\
+  border: 1px solid #eaeaea;\
   border-radius: 12px;\
 }\
 .rmp-user-avatar {\
@@ -2595,7 +2528,6 @@
   height: 52px;\
   border-radius: 50%;\
   object-fit: cover;\
-  border: 2px solid rgba(194,12,12,0.3);\
   background: #f0f0f2;\
 }\
 .rmp-user-name {\
@@ -2671,6 +2603,8 @@
   display: flex;\
   align-items: center;\
   gap: 4px;\
+  background: #ffffff;\
+  border-bottom: 1px solid #eaeaea;\
   /* 关键：顶部留出灵动岛空间。灵动岛高度52px + top偏移(默认8px) + safe-area + 缓冲16px */\
   padding: calc(env(safe-area-inset-top) + var(--rmp-island-top, 8px) + 52px + 16px) 8px 8px;\
   flex-shrink: 0;\
@@ -2771,8 +2705,8 @@
   min-width: 44px;\
   min-height: 44px;\
   padding: 8px 12px;\
-  background: rgba(255, 107, 107, 0.12);\
-  color: #E60026;\
+  background: #f5f5f7;\
+  color: #888888;\
   border: none;\
   border-radius: 12px;\
   cursor: pointer;\
@@ -2781,9 +2715,9 @@
   display: inline-flex;\
   align-items: center;\
   justify-content: center;\
-  transition: all 0.2s ease;\
+  transition: background 0.2s ease, color 0.2s ease;\
 }\
-.rmp-close-btn:hover { background: rgba(255, 107, 107, 0.22); }\
+.rmp-close-btn:hover { background: #ececee; color: #555555; }\
 .rmp-toggle-row {\
   display: flex;\
   align-items: center;\
@@ -2880,27 +2814,24 @@
   gap: 12px;\
   flex: 1;\
 }\
-/* 未登录区：网易云红渐变玻璃卡片 */\
+/* 未登录区：纯白卡片，圆角12px，浅灰边框 */\
 .rmp-netease-logged-out {\
-  background: linear-gradient(135deg, rgba(194,12,12,0.08) 0%, rgba(194,12,12,0.02) 55%, rgba(255,255,255,0.4) 100%);\
-  border: 1px solid rgba(194,12,12,0.2);\
-  border-radius: 16px;\
+  background: #ffffff;\
+  border: 1px solid #eaeaea;\
+  border-radius: 12px;\
   padding: 12px 14px;\
-  backdrop-filter: blur(12px);\
-  -webkit-backdrop-filter: blur(12px);\
-  box-shadow: 0 4px 16px rgba(194,12,12,0.1);\
-  transition: box-shadow 0.3s ease, border-color 0.3s ease;\
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);\
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;\
 }\
 .rmp-netease-logged-out:hover {\
-  border-color: rgba(194,12,12,0.32);\
-  box-shadow: 0 6px 22px rgba(194,12,12,0.16);\
+  border-color: #d8d8d8;\
+  box-shadow: 0 4px 14px rgba(0,0,0,0.06);\
 }\
 .rmp-netease-avatar {\
-  width: 44px; height: 44px;\
+  width: 40px; height: 40px;\
   border-radius: 50%;\
   object-fit: cover;\
   background: #f0f0f2;\
-  border: 2px solid rgba(194,12,12,0.3);\
   flex-shrink: 0;\
 }\
 .rmp-netease-user-info { flex: 1; min-width: 0; }\
@@ -2930,43 +2861,42 @@
   font-size: 11px; color: var(--rmp-text-secondary);\
 }\
 .rmp-netease-subnav {\
-  display: flex; gap: 2px; padding: 0 0 10px;\
-  border-bottom: 1px solid rgba(0,0,0,0.04); margin-bottom: 12px;\
+  display: flex; gap: 4px; padding: 0 0 10px;\
+  border-bottom: 1px solid #eaeaea; margin-bottom: 12px;\
+  overflow-x: auto; -webkit-overflow-scrolling: touch;\
 }\
+.rmp-netease-subnav::-webkit-scrollbar { display: none; }\
 .rmp-nsub-btn {\
   padding: 7px 16px; border: none; background: transparent;\
-  color: var(--rmp-text-secondary); font-size: 13px; cursor: pointer;\
-  border-radius: 8px; transition: all 0.2s; position: relative;\
+  color: #888888; font-size: 13px; cursor: pointer;\
+  border-radius: 0; transition: color 0.2s; position: relative; white-space: nowrap; flex-shrink: 0;\
 }\
-.rmp-nsub-btn:hover { color: var(--rmp-text-primary); background: rgba(0,0,0,0.03); }\
-.rmp-nsub-btn.active { color: var(--rmp-red); background: rgba(194,12,12,0.08); font-weight: 600; }\
+.rmp-nsub-btn:hover { color: var(--rmp-text-primary); }\
+.rmp-nsub-btn.active { color: #C20C0C; font-weight: 600; }\
+.rmp-nsub-btn.active::after {\
+  content: ""; position: absolute; bottom: -11px; left: 50%;\
+  transform: translateX(-50%); width: 20px; height: 3px;\
+  background: #C20C0C; border-radius: 2px;\
+}\
 .rmp-nsub-panel { display: none; }\
 .rmp-nsub-panel.active { display: block; }\
 .rmp-netease-recs { display: flex; flex-direction: column; gap: 6px; }\
-.rmp-netease-playlists { display: flex; flex-direction: column; gap: 8px; }\
+.rmp-netease-playlists { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }\
 .rmp-netease-pl-item {\
   display: flex; align-items: center; gap: 12px; padding: 10px;\
   border-radius: var(--rmp-radius); cursor: pointer;\
-  transition: transform 0.25s var(--rmp-transition), background 0.25s var(--rmp-transition), box-shadow 0.25s var(--rmp-transition), border-color 0.25s var(--rmp-transition);\
-  background: #fff; border: 1px solid rgba(0,0,0,0.06);\
-  -webkit-backdrop-filter: blur(10px);\
-  backdrop-filter: blur(10px);\
+  transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;\
+  background: #fff; border: 1px solid #eaeaea;\
 }\
 .rmp-netease-pl-item:hover {\
-  background: #fff;\
-  border-color: rgba(236,65,65,0.28);\
-  transform: translateY(-2px) scale(1.012);\
-  box-shadow: 0 6px 18px rgba(0,0,0,0.08), 0 0 0 1px rgba(236,65,65,0.1);\
+  background: #fafafa;\
+  border-color: #d8d8d8;\
+  box-shadow: 0 4px 14px rgba(0,0,0,0.06);\
 }\
-.rmp-netease-pl-item:active { transform: translateY(0) scale(0.99); }\
+.rmp-netease-pl-item:active { background: #f0f0f2; }\
 .rmp-netease-pl-cover {\
   width: 52px; height: 52px; border-radius: 8px; object-fit: cover;\
   background: #f0f0f2; flex-shrink: 0;\
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);\
-  transition: box-shadow 0.25s var(--rmp-transition);\
-}\
-.rmp-netease-pl-item:hover .rmp-netease-pl-cover {\
-  box-shadow: 0 4px 14px rgba(194,12,12,0.22);\
 }\
 .rmp-netease-pl-info { flex: 1; min-width: 0; }\
 .rmp-netease-pl-name {\
@@ -2979,6 +2909,22 @@
 .rmp-netease-pl-arrow {\
   color: var(--rmp-text-tertiary); font-size: 16px; flex-shrink: 0;\
 }\
+/* 主面板歌单网格：3列竖排卡片（封面在上，标题在下） */\
+.rmp-netease-playlists .rmp-netease-pl-item {\
+  flex-direction: column; align-items: stretch; gap: 8px; padding: 8px;\
+}\
+.rmp-netease-playlists .rmp-netease-pl-cover {\
+  width: 100%; height: auto; aspect-ratio: 1 / 1; border-radius: 6px;\
+}\
+.rmp-netease-playlists .rmp-netease-pl-name {\
+  font-size: 13px; line-height: 1.4;\
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;\
+  white-space: normal; overflow: hidden; text-overflow: ellipsis;\
+}\
+.rmp-netease-playlists .rmp-netease-pl-meta {\
+  font-size: 10px; color: #bbbbbb;\
+}\
+.rmp-netease-playlists .rmp-netease-pl-arrow { display: none; }\
 .rmp-netease-pl-loading { text-align: center; padding: 32px; color: var(--rmp-text-tertiary); }\
 /* 歌曲操作按钮：红心收藏 + 添加到歌单 */\
 .rmp-song-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }\
