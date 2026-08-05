@@ -82,6 +82,10 @@
     justSwitched: null,
     // 听歌记录缓存
     historySongs: [],
+    // 当前查看的歌单ID（用于歌单详情页的删除操作）
+    currentViewingPlaylistId: null,
+    // 用户歌单缓存（用于"添加到歌单"选择列表）
+    userPlaylistsCache: [],
     // 网易云播放 URL 缓存（songId -> {url, ts}），避免每次播放都重新请求 /play
     songUrlCache: {},
     initialized: false
@@ -3422,6 +3426,7 @@
         return;
       }
       STATE.isSearching = true;
+      STATE.currentViewingPlaylistId = null;
       refs.neSearchResults.innerHTML = '<div class="rmp-loading"><div class="rmp-spinner"></div></div>';
       neteaseApi('/api/search/get?s=' + encodeURIComponent(keywords) + '&type=1&limit=20').then(function(resp) {
         STATE.isSearching = false;
@@ -3471,6 +3476,14 @@
           var likeBtn = e.target.closest('.rmp-like-btn');
           likeBtn.classList.toggle('liked');
           doLikeSong(song.id);
+          return;
+        }
+        if (e.target.closest('.rmp-remove-from-pl-btn')) {
+          removeFromNeteasePlaylist(song.id, STATE.currentViewingPlaylistId);
+          return;
+        }
+        if (e.target.closest('.rmp-add-to-pl-btn')) {
+          showAddToPlaylistModal(song.id);
           return;
         }
         var idx = addToPlaylist(song);
@@ -3788,7 +3801,13 @@
       html += '<div class="rmp-song-meta">' + escapeHtml(artistName || '') + '</div>';
       html += '</div>';
       html += '<div class="rmp-song-duration">' + escapeHtml(duration) + '</div>';
-      html += '<div class="rmp-song-actions"><button class="rmp-btn-icon rmp-like-btn" title="红心收藏">' + ICONS.heart + '</button><button class="rmp-btn-icon rmp-add-btn" title="添加到播放列表"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></button></div>';
+      html += '<div class="rmp-song-actions"><button class="rmp-btn-icon rmp-like-btn" title="红心收藏">' + ICONS.heart + '</button>';
+      if (STATE.currentViewingPlaylistId) {
+        html += '<button class="rmp-btn-icon rmp-remove-from-pl-btn" title="从歌单删除"><svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z"/></svg></button>';
+      } else {
+        html += '<button class="rmp-btn-icon rmp-add-to-pl-btn" title="添加到歌单"><svg viewBox="0 0 24 24"><path d="M4 6h2v2H4zm0 5h2v2H4zm0 5h2v2H4zm4-10h12v2H8zm0 5h12v2H8zm0 5h12v2H8z"/></svg></button>';
+      }
+      html += '<button class="rmp-btn-icon rmp-add-btn" title="添加到播放列表"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></button></div>';
       html += '</div>';
     }
     refs.neSearchResults.innerHTML = html;
@@ -4101,6 +4120,7 @@
         refs.nePlaylists.innerHTML = '<div class="rmp-empty-state">暂无歌单，请确认已登录</div>';
         return;
       }
+      STATE.userPlaylistsCache = list;
       var html = '';
       for (var i = 0; i < list.length; i++) {
         var pl = list[i];
@@ -4140,6 +4160,7 @@
       refs.neSearchResults.innerHTML = '<div class="rmp-empty-state">请先设置Cookie</div>';
       return;
     }
+    STATE.currentViewingPlaylistId = plId;
     refs.neSearchResults.innerHTML = '<div class="rmp-loading"><div class="rmp-spinner"></div></div>';
     refs.neSubnavBtns.forEach(function(b) { b.classList.toggle('active', b.getAttribute('data-nsub') === 'search'); });
     refs.neSubpanels.forEach(function(p) { p.classList.toggle('active', p.getAttribute('data-nsub') === 'search'); });
@@ -4264,6 +4285,85 @@
       if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('已红心收藏');
     }).catch(function(e) {
       if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('收藏失败：' + (e.message || '未知错误'));
+    });
+  }
+
+  // 从网易云歌单删除歌曲
+  function removeFromNeteasePlaylist(songId, plId) {
+    if (!STATE.cookie || !songId || !plId) return;
+    neteaseApi('/api/playlist/tracks?op=del&pid=' + plId + '&tracks=' + songId, {}, 'POST').then(function(resp) {
+      if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('已从歌单删除');
+      // 刷新歌单详情
+      if (STATE.currentViewingPlaylistId) loadPlaylistSongs(STATE.currentViewingPlaylistId);
+    }).catch(function(e) {
+      if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('删除失败：' + (e.message || '未知错误'));
+    });
+  }
+
+  // 弹出"添加到歌单"选择浮层
+  function showAddToPlaylistModal(songId) {
+    if (!STATE.cookie) {
+      if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('请先登录网易云');
+      return;
+    }
+    if (!songId) return;
+    // 如果有缓存的歌单列表直接用，否则先获取
+    if (STATE.userPlaylistsCache.length === 0) {
+      neteaseApi('/api/nuser/account/get').then(function(resp) {
+        var uid = (resp.profile || {}).userId;
+        if (!uid) { if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('获取用户信息失败'); return; }
+        return neteaseApi('/api/user/playlist?uid=' + uid + '&limit=50&offset=0');
+      }).then(function(resp) {
+        if (!resp || !resp.playlist) return;
+        STATE.userPlaylistsCache = resp.playlist;
+        renderAddToPlaylistModal(songId, STATE.userPlaylistsCache);
+      }).catch(function() {
+        if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('获取歌单列表失败');
+      });
+    } else {
+      renderAddToPlaylistModal(songId, STATE.userPlaylistsCache);
+    }
+  }
+
+  function renderAddToPlaylistModal(songId, playlists) {
+    // 移除已有的模态框
+    var existing = document.getElementById('rmp-add-to-pl-modal');
+    if (existing) existing.remove();
+    var modal = document.createElement('div');
+    modal.id = 'rmp-add-to-pl-modal';
+    modal.className = 'rmp-qr-modal';
+    var html = '<div class="rmp-qr-modal-mask"></div>';
+    html += '<div class="rmp-qr-modal-box" style="width:320px;">';
+    html += '<div class="rmp-qr-modal-close">×</div>';
+    html += '<div class="rmp-qr-modal-title">添加到歌单</div>';
+    html += '<div style="max-height:300px;overflow-y:auto;">';
+    for (var i = 0; i < playlists.length; i++) {
+      var pl = playlists[i];
+      html += '<div class="rmp-netease-pl-item" data-plid="' + pl.id + '" style="margin-bottom:6px;">';
+      var cover = pl.coverImgUrl || '';
+      if (cover) html += '<img class="rmp-netease-pl-cover" src="' + escapeHtml(cover) + '" alt="" />';
+      else html += '<div class="rmp-netease-pl-cover" style="display:flex;align-items:center;justify-content:center;font-size:18px;color:rgba(255,255,255,0.2);">' + (pl.name || '').charAt(0) + '</div>';
+      html += '<div class="rmp-netease-pl-info"><div class="rmp-netease-pl-name">' + escapeHtml(pl.name || '') + '</div>';
+      html += '<div class="rmp-netease-pl-meta">' + (pl.trackCount || 0) + ' 首歌曲</div></div>';
+      html += '</div>';
+    }
+    html += '</div></div>';
+    modal.innerHTML = html;
+    document.body.appendChild(modal);
+    // 关闭事件
+    modal.querySelector('.rmp-qr-modal-close').addEventListener('click', function () { modal.remove(); });
+    modal.querySelector('.rmp-qr-modal-mask').addEventListener('click', function () { modal.remove(); });
+    // 选择歌单
+    modal.querySelectorAll('.rmp-netease-pl-item').forEach(function(el) {
+      el.addEventListener('click', function() {
+        var plId = this.getAttribute('data-plid');
+        neteaseApi('/api/playlist/tracks?op=add&pid=' + plId + '&tracks=' + songId, {}, 'POST').then(function(resp) {
+          if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('已添加到歌单');
+          modal.remove();
+        }).catch(function(e) {
+          if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('添加失败，歌曲可能已在歌单中');
+        });
+      });
     });
   }
 
