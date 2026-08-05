@@ -60,6 +60,7 @@
     isSearching: false,
     // 定时器
     qrPollTimer: null,
+    qrVisHandler: null,  // visibilitychange 监听器引用（切回页面时补 check）
     // audio 事件清理
     audioCleanups: [],
     // iOS 音频解锁状态
@@ -4457,13 +4458,16 @@
         qrStatus.innerHTML = '请用<strong>网易云音乐 APP</strong>扫码<br><a href="' + d.qrurl + '" target="_blank" style="color:#6cf;">手机上打不开？点此链接</a>';
         qrStatus.className = 'rmp-qr-status-el';
 
-        STATE.qrPollTimer = setInterval(function () {
+        // 轮询 check 抽成独立函数：切回页面时也能立即调用，避免后台挂起错过 802/803
+        var qrPollingActive = false;
+        function doQrCheck() {
+          if (!qrPollingActive) return;
           if (!document.body.contains(overlay)) {
-            clearInterval(STATE.qrPollTimer);
-            STATE.qrPollTimer = null;
+            stopQrPoll();
             return;
           }
           ncmGet('/login/qr/check?key=' + encodeURIComponent(unikey)).then(function (resp) {
+            if (!qrPollingActive) return;
             var code = resp && resp.code;
             var dd = (resp && resp.data) || {};
             console.log('[扫码登录轮询] code=' + code + ' resp=', resp);
@@ -4481,8 +4485,7 @@
               updateNeteaseLoginUI();
               qrStatus.textContent = '登录成功！';
               qrStatus.className = 'rmp-qr-status-el success';
-              clearInterval(STATE.qrPollTimer);
-              STATE.qrPollTimer = null;
+              stopQrPoll();
               setTimeout(function () { overlay.remove(); }, 1500);
               if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('网易云登录成功' + (dd.nickname ? '：' + dd.nickname : ''));
               // 异步拉取完整用户信息（头像/VIP），走用户自己的实例
@@ -4498,8 +4501,7 @@
               // 二维码过期：显示重试按钮，避免用户必须关闭弹窗再点登录
               qrStatus.innerHTML = '二维码已过期<br><button class="rmp-qr-retry-btn">重新获取二维码</button>';
               qrStatus.className = 'rmp-qr-status-el error';
-              clearInterval(STATE.qrPollTimer);
-              STATE.qrPollTimer = null;
+              stopQrPoll();
               var retryBtn = qrStatus.querySelector('.rmp-qr-retry-btn');
               if (retryBtn) retryBtn.addEventListener('click', function () {
                 qrImg.style.display = 'none';
@@ -4516,7 +4518,27 @@
               qrStatus.className = 'rmp-qr-status-el';
             }
           }).catch(function () {});
-        }, 2000);
+        }
+
+        // 停止轮询：清除定时器 + 移除可见性监听 + 标记停止
+        function stopQrPoll() {
+          qrPollingActive = false;
+          if (STATE.qrPollTimer) { clearInterval(STATE.qrPollTimer); STATE.qrPollTimer = null; }
+          if (STATE.qrVisHandler) { document.removeEventListener('visibilitychange', STATE.qrVisHandler); STATE.qrVisHandler = null; }
+        }
+
+        // 切回页面时立即补一次 check：解决切出去扫码回来时定时器被挂起、错过 802/803 的问题
+        STATE.qrVisHandler = function () {
+          if (document.visibilityState === 'visible' && qrPollingActive) {
+            console.log('[扫码登录] 页面重新可见，立即 check 一次');
+            doQrCheck();
+          }
+        };
+        document.addEventListener('visibilitychange', STATE.qrVisHandler);
+
+        qrPollingActive = true;
+        STATE.qrPollTimer = setInterval(doQrCheck, 2000);
+        doQrCheck(); // 立即执行第一次
       });
     }).catch(function () {
       qrPlaceholder.textContent = '获取二维码失败';
@@ -4554,10 +4576,12 @@
     overlay.querySelector('.rmp-qr-modal-close').addEventListener('click', function() {
       overlay.remove();
       if (STATE.qrPollTimer) { clearInterval(STATE.qrPollTimer); STATE.qrPollTimer = null; }
+      if (STATE.qrVisHandler) { document.removeEventListener('visibilitychange', STATE.qrVisHandler); STATE.qrVisHandler = null; }
     });
     overlay.querySelector('.rmp-qr-modal-mask').addEventListener('click', function() {
       overlay.remove();
       if (STATE.qrPollTimer) { clearInterval(STATE.qrPollTimer); STATE.qrPollTimer = null; }
+      if (STATE.qrVisHandler) { document.removeEventListener('visibilitychange', STATE.qrVisHandler); STATE.qrVisHandler = null; }
     });
 
     // 配置了自部署实例 → 扫码走 NCM 接口（cookie 只回用户自己的实例）
@@ -4579,10 +4603,14 @@
     STATE.appCleanups.forEach(function (fn) { fn(); });
     STATE.appCleanups = [];
 
-    // 清理 QR 轮询
+    // 清理 QR 轮询 + 可见性监听
     if (STATE.qrPollTimer) {
       clearInterval(STATE.qrPollTimer);
       STATE.qrPollTimer = null;
+    }
+    if (STATE.qrVisHandler) {
+      document.removeEventListener('visibilitychange', STATE.qrVisHandler);
+      STATE.qrVisHandler = null;
     }
 
     // 移除样式
