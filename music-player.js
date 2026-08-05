@@ -4448,14 +4448,14 @@
           qrStatus.className = 'rmp-qr-status-el error';
           return;
         }
-        if (d.qrimg) {
-          qrImg.src = d.qrimg; // base64 图片，不依赖外链
-        } else {
-          qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(d.qrurl);
-        }
+        // NeteaseCloudMusicApi 已知 bug：qrurl 前后可能带反引号（`），导致二维码内容错误，手机扫码提示失效
+        var cleanQrUrl = (d.qrurl || '').replace(/^`+|`+$/g, '').trim();
+        console.log('[扫码登录] qrurl 原始=' + d.qrurl + ' 清洗后=' + cleanQrUrl);
+        // 不用服务端 qrimg（用带反引号的 qrurl 生成的，扫码会失效），改用清洗后的 qrurl 生成正确二维码
+        qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(cleanQrUrl);
         qrImg.style.display = 'block';
         qrPlaceholder.style.display = 'none';
-        qrStatus.innerHTML = '请用<strong>网易云音乐 APP</strong>扫码<br><a href="' + d.qrurl + '" target="_blank" style="color:#6cf;">手机上打不开？点此链接</a>';
+        qrStatus.innerHTML = '请用<strong>网易云音乐 APP</strong>扫码<br><a href="' + cleanQrUrl + '" target="_blank" style="color:#6cf;">手机上打不开？点此链接</a>';
         qrStatus.className = 'rmp-qr-status-el';
 
         // 轮询 check 抽成独立函数：切回页面时也能立即调用，避免后台挂起错过 802/803
