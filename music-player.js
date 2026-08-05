@@ -234,6 +234,8 @@
     if (queryStr) params.push(queryStr);
     // 加 timestamp 绕过 Netlify/Vercel CDN 缓存
     params.push('timestamp=' + Date.now());
+    // 加 realIP 模拟国内请求源，绕过海外节点风控（自部署实例跑在 Vercel/Netlify 时必备）
+    params.push('realIP=223.5.5.5');
     if (STATE.cookie && method === 'GET') params.push('cookie=' + encodeURIComponent(STATE.cookie));
     var url = base + ncmPath + (params.length ? '?' + params.join('&') : '');
     var fetchOpts = { method: method, headers: { 'Accept': 'application/json' } };
@@ -4422,8 +4424,9 @@
   function startNcmQrLogin(ncmBase, overlay, qrImg, qrPlaceholder, qrStatus) {
     function ncmGet(path) {
       // 加 timestamp 参数绕过 Netlify CDN 缓存（否则 check 接口会一直返回缓存的 801）
+      // 加 realIP 模拟国内请求源，绕过海外节点风控（APK 端扫码确认后 check 拿不到 803 的关键修复）
       var sep = path.indexOf('?') >= 0 ? '&' : '?';
-      var noCacheUrl = ncmBase + path + sep + 'timestamp=' + Date.now();
+      var noCacheUrl = ncmBase + path + sep + 'timestamp=' + Date.now() + '&realIP=223.5.5.5';
       console.log('[扫码登录 ncmGet]', noCacheUrl);
       return fetch(noCacheUrl).then(function (r) {
         return r.text().then(function (text) {
