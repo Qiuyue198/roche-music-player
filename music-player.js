@@ -4634,6 +4634,7 @@
     var refs = STATE.appRefs;
     if (!refs.root) return;
     if (refs.cookieInput) refs.cookieInput.value = STATE.cookie || '';
+    if (refs.neaBaseInput) refs.neaBaseInput.value = STATE.neteaseApiBase || '';
     if (refs.qualitySelect) refs.qualitySelect.value = STATE.quality;
     if (refs.volumeSlider) refs.volumeSlider.value = STATE.volume;
     if (refs.islandTopInput) refs.islandTopInput.value = STATE.islandTop;
