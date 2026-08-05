@@ -104,15 +104,21 @@
     if (!lrcText) return [];
     var lines = lrcText.split('\n');
     var result = [];
+    // 元数据行关键词：作词/作曲/编曲/制作人/录音/混音/母带/和声/乐器/OP/SP 等
+    // 这些行时间戳集中在 0-5 秒，不过滤会导致播放进度越过时 currentLyricIndex 大幅跳跃
+    var metaPattern = /^(作词|作曲|编曲|制作人|录音|混音|母带|和声|吉他|贝斯|鼓|键盘|弦乐|打击乐|钢琴|合成器|编程|协奏|指挥|乐手|录音室|OP|SP|原曲|改编|采样|MV导演|封面|设计|排版|出品|发行|版权|语言|流派|风格|曲风|专辑|发行公司|出品方|原版|翻唱|原唱|翻唱自)/;
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
       var match = line.match(/\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/);
       if (match) {
+        var text = match[4].trim();
+        // 过滤空行和元数据行（作词/作曲/编曲等），避免歌词列表跳跃
+        if (!text || metaPattern.test(text)) continue;
         var min = parseInt(match[1], 10);
         var sec = parseInt(match[2], 10);
         var ms = parseInt(match[3].padEnd(3, '0'), 10);
         var time = min * 60 + sec + ms / 1000;
-        result.push({ time: time, text: match[4].trim() });
+        result.push({ time: time, text: text });
       }
     }
     return result.sort(function (a, b) { return a.time - b.time; });
@@ -824,18 +830,19 @@
   left: 50%;\
   transform: translateX(-50%);\
   z-index: 99999;\
-  /* 深黑玻璃质感 */\
-  background: rgba(18, 18, 18, 0.86);\
-  -webkit-backdrop-filter: blur(28px) saturate(200%);\
-  backdrop-filter: blur(28px) saturate(200%);\
+  box-sizing: border-box;\
+  /* 网易云红毛玻璃质感 */\
+  background: linear-gradient(135deg, rgba(194,12,12,0.85) 0%, rgba(160,8,8,0.85) 100%);\
+  -webkit-backdrop-filter: blur(20px) saturate(180%);\
+  backdrop-filter: blur(20px) saturate(180%);\
   /* 真·胶囊圆角（iPhone 灵动岛风格）*/\
   border-radius: 44px;\
-  /* 多层次精致阴影 + 顶部光泽 + 红色环境微光 */\
+  border: 1px solid rgba(255,255,255,0.15);\
+  /* 多层次精致阴影 + 顶部光泽 */\
   box-shadow:\
-    0 6px 30px rgba(0, 0, 0, 0.5),\
-    0 2px 16px rgba(194, 12, 12, 0.12),\
-    0 0 0 0.5px rgba(255, 255, 255, 0.1),\
-    inset 0 0.5px 0 rgba(255, 255, 255, 0.06);\
+    0 4px 20px rgba(194, 12, 12, 0.3),\
+    0 2px 12px rgba(0, 0, 0, 0.2),\
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.15);\
   color: #fff;\
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;\
   cursor: pointer;\
@@ -868,10 +875,9 @@
   border-radius: 32px;\
   /* 展开态：更强的红色环境光 */\
   box-shadow:\
-    0 14px 48px rgba(0, 0, 0, 0.58),\
-    0 6px 30px rgba(194, 12, 12, 0.26),\
-    0 0 0 0.5px rgba(255, 255, 255, 0.12),\
-    inset 0 0.5px 0 rgba(255, 255, 255, 0.08);\
+    0 14px 48px rgba(194, 12, 12, 0.4),\
+    0 6px 24px rgba(0, 0, 0, 0.25),\
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.18);\
 }\
 /* 最小化 */\
 #rmp-island.rmp-island-minimized {\
@@ -1034,7 +1040,8 @@
   font-size: 14px;\
   font-weight: 600;\
   letter-spacing: -0.01em;\
-  color: #ff3b3b;\
+  color: #fff;\
+  text-shadow: 0 1px 4px rgba(0,0,0,0.25);\
   white-space: nowrap;\
   overflow: hidden;\
   text-overflow: ellipsis;\
@@ -1066,7 +1073,7 @@
 }\
 .rmp-island-progress-fill {\
   height: 100%;\
-  background: linear-gradient(90deg, #ff3b3b, #ff6b6b);\
+  background: linear-gradient(90deg, #ffffff, #ffd0d0);\
   border-radius: 1px;\
   width: 0%;\
   transition: width 0.15s linear;\
@@ -1084,7 +1091,7 @@
   border-radius: 50%;\
   opacity: 0;\
   transition: opacity 0.2s;\
-  box-shadow: 0 0 6px rgba(255, 59, 59, 0.4);\
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);\
 }\
 .rmp-island-progress:hover .rmp-island-progress-fill::after {\
   opacity: 1;\
@@ -1102,11 +1109,12 @@
 .rmp-island-playlist-popup {\
   position: fixed;\
   z-index: 99998;\
-  background: rgba(18, 18, 18, 0.93);\
+  background: linear-gradient(135deg, rgba(194,12,12,0.92) 0%, rgba(150,8,8,0.92) 100%);\
   -webkit-backdrop-filter: blur(24px) saturate(180%);\
   backdrop-filter: blur(24px) saturate(180%);\
   border-radius: 18px;\
-  box-shadow: 0 8px 36px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(255, 255, 255, 0.08);\
+  border: 1px solid rgba(255,255,255,0.15);\
+  box-shadow: 0 8px 36px rgba(194, 12, 12, 0.35), 0 2px 12px rgba(0, 0, 0, 0.2);\
   max-height: 300px;\
   overflow: hidden;\
   -webkit-overflow-scrolling: touch;\
@@ -1165,7 +1173,7 @@
   width: 5px;\
   height: 5px;\
   border-radius: 50%;\
-  background: #ff3b3b;\
+  background: #fff;\
   flex-shrink: 0;\
   opacity: 0;\
 }\
@@ -1193,7 +1201,7 @@
   position: relative;\
 }\
 .rmp-island-popup-tab.active {\
-  color: rgba(255,255,255,0.9);\
+  color: #fff;\
 }\
 .rmp-island-popup-tab.active::after {\
   content: "";\
@@ -1203,7 +1211,7 @@
   right: 25%;\
   height: 2px;\
   border-radius: 1px;\
-  background: linear-gradient(90deg, #EC4141, #C20C0C);\
+  background: #fff;\
 }\
 .rmp-island-popup-content {\
   max-height: 220px;\
@@ -1852,32 +1860,32 @@
   function getAppStyles() {
     return '\
 .roche-music-player {\
-  /* ===== 网易云红毛玻璃 · 设计变量 ===== */\
+  /* ===== 网易云白色小清新 · 设计变量 ===== */\
   --rmp-red: #C20C0C;\
   --rmp-red-light: #EC4141;\
   --rmp-red-gradient: linear-gradient(135deg, #EC4141, #C20C0C);\
-  --rmp-bg-base: #1a1a1f;\
-  --rmp-bg-card: rgba(255,255,255,0.04);\
-  --rmp-bg-glass: rgba(18,18,18,0.6);\
-  --rmp-blur: 24px;\
-  --rmp-text-primary: rgba(255,255,255,0.9);\
-  --rmp-text-secondary: rgba(255,255,255,0.5);\
-  --rmp-text-tertiary: rgba(255,255,255,0.3);\
-  --rmp-border: rgba(255,255,255,0.08);\
-  --rmp-radius: 12px;\
-  --rmp-radius-lg: 18px;\
-  --rmp-shadow: 0 8px 32px rgba(0,0,0,0.4);\
+  --rmp-bg-base: #f5f5f7;\
+  --rmp-bg-card: #ffffff;\
+  --rmp-bg-glass: rgba(255,255,255,0.72);\
+  --rmp-blur: 20px;\
+  --rmp-text-primary: #333333;\
+  --rmp-text-secondary: #999999;\
+  --rmp-text-tertiary: #bbbbbb;\
+  --rmp-border: rgba(0,0,0,0.06);\
+  --rmp-radius: 8px;\
+  --rmp-radius-lg: 12px;\
+  --rmp-shadow: 0 2px 12px rgba(0,0,0,0.06);\
   --rmp-transition: cubic-bezier(0.16, 1, 0.3, 1);\
   width: 100%;\
   height: 100%;\
   display: flex;\
   flex-direction: column;\
   background:\
-    radial-gradient(1200px 600px at 80% -10%, rgba(194,12,12,0.10) 0%, transparent 60%),\
-    radial-gradient(900px 500px at -10% 110%, rgba(236,65,65,0.06) 0%, transparent 60%),\
-    linear-gradient(165deg, #212126 0%, #151519 45%, #1a1a1f 100%);\
-  -webkit-backdrop-filter: blur(var(--rmp-blur)) saturate(160%);\
-  backdrop-filter: blur(var(--rmp-blur)) saturate(160%);\
+    radial-gradient(1000px 500px at 85% -10%, rgba(194,12,12,0.04) 0%, transparent 60%),\
+    radial-gradient(800px 400px at -10% 110%, rgba(236,65,65,0.03) 0%, transparent 60%),\
+    #f5f5f7;\
+  -webkit-backdrop-filter: blur(var(--rmp-blur)) saturate(140%);\
+  backdrop-filter: blur(var(--rmp-blur)) saturate(140%);\
   color: var(--rmp-text-primary);\
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;\
   font-size: 14px;\
@@ -1895,7 +1903,7 @@
   top: -40%; right: -20%;\
   width: 60%; height: 60%;\
   border-radius: 50%;\
-  background: radial-gradient(circle, rgba(194,12,12,0.10) 0%, transparent 70%);\
+  background: radial-gradient(circle, rgba(194,12,12,0.05) 0%, transparent 70%);\
   pointer-events: none;\
   z-index: 0;\
 }\
@@ -1905,7 +1913,7 @@
   bottom: -30%; left: -15%;\
   width: 50%; height: 50%;\
   border-radius: 50%;\
-  background: radial-gradient(circle, rgba(230,0,38,0.06) 0%, transparent 70%);\
+  background: radial-gradient(circle, rgba(230,0,38,0.03) 0%, transparent 70%);\
   pointer-events: none;\
   z-index: 0;\
 }\
@@ -1917,7 +1925,7 @@
   flex-shrink: 0;\
   overflow-x: auto;\
   -webkit-overflow-scrolling: touch;\
-  border-bottom: 1px solid rgba(255,255,255,0.06);\
+  border-bottom: 1px solid rgba(0,0,0,0.06);\
 }\
 .rmp-tabs::-webkit-scrollbar { display: none; }\
 .rmp-tab {\
@@ -1934,12 +1942,13 @@
   position: relative;\
 }\
 .rmp-tab:hover {\
-  color: rgba(255,255,255,0.78);\
-  background: rgba(255,255,255,0.04);\
+  color: var(--rmp-text-secondary);\
+  background: rgba(0,0,0,0.03);\
 }\
 .rmp-tab.active {\
-  color: #fff;\
+  color: var(--rmp-red);\
   background: transparent;\
+  font-weight: 600;\
 }\
 .rmp-tab.active::after {\
   content: "";\
@@ -1949,7 +1958,7 @@
   width: 28px; height: 2.5px;\
   background: var(--rmp-red-gradient);\
   border-radius: 2px;\
-  box-shadow: 0 0 10px rgba(194,12,12,0.6), 0 2px 6px rgba(236,65,65,0.35);\
+  box-shadow: 0 0 6px rgba(194,12,12,0.4);\
 }\
 .rmp-panels {\
   flex: 1;\
@@ -1959,7 +1968,7 @@
 }\
 .rmp-panels::-webkit-scrollbar { width: 6px; }\
 .rmp-panels::-webkit-scrollbar-track { background: transparent; }\
-.rmp-panels::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }\
+.rmp-panels::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 3px; }\
 .rmp-panel { display: none; }\
 .rmp-panel.active { display: block; }\
 .rmp-card {\
@@ -1970,7 +1979,7 @@
   border: 1px solid var(--rmp-border);\
   -webkit-backdrop-filter: blur(14px) saturate(140%);\
   backdrop-filter: blur(14px) saturate(140%);\
-  box-shadow: 0 4px 18px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04);\
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);\
   position: relative;\
   transition: border-color 0.3s var(--rmp-transition), box-shadow 0.3s var(--rmp-transition), transform 0.3s var(--rmp-transition);\
 }\
@@ -1980,20 +1989,20 @@
   inset: 0;\
   border-radius: inherit;\
   padding: 1px;\
-  background: linear-gradient(135deg, rgba(236,65,65,0.32), rgba(194,12,12,0.08) 40%, transparent 70%);\
+  background: linear-gradient(135deg, rgba(236,65,65,0.18), rgba(194,12,12,0.04) 40%, transparent 70%);\
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);\
   -webkit-mask-composite: xor;\
   mask-composite: exclude;\
-  opacity: 0.55;\
+  opacity: 0.4;\
   pointer-events: none;\
   transition: opacity 0.3s var(--rmp-transition);\
 }\
 .rmp-card:hover {\
-  border-color: rgba(236,65,65,0.22);\
-  box-shadow: 0 8px 28px rgba(0,0,0,0.32), 0 0 0 1px rgba(236,65,65,0.10), inset 0 1px 0 rgba(255,255,255,0.06);\
+  border-color: rgba(236,65,65,0.18);\
+  box-shadow: 0 4px 18px rgba(0,0,0,0.08), 0 0 0 1px rgba(236,65,65,0.08);\
 }\
 .rmp-card:hover::before {\
-  opacity: 0.95;\
+  opacity: 0.8;\
 }\
 .rmp-search-bar {\
   display: flex;\
@@ -2005,33 +2014,33 @@
   flex: 1;\
   min-width: 160px;\
   padding: 10px 16px;\
-  background: rgba(255, 255, 255, 0.06);\
-  border: 1px solid rgba(255, 255, 255, 0.1);\
+  background: #fff;\
+  border: 1px solid rgba(0,0,0,0.08);\
   border-radius: 999px;\
-  color: #fff;\
+  color: var(--rmp-text-primary);\
   font-size: 14px;\
   outline: none;\
   transition: all 0.2s;\
 }\
 .rmp-search-input:focus {\
   border-color: #EC4141;\
-  background: rgba(255, 255, 255, 0.08);\
-  box-shadow: 0 0 0 3px rgba(194,12,12,0.16);\
+  background: #fff;\
+  box-shadow: 0 0 0 3px rgba(194,12,12,0.12);\
 }\
-.rmp-search-input::placeholder { color: rgba(255,255,255,0.3); }\
+.rmp-search-input::placeholder { color: var(--rmp-text-tertiary); }\
 .rmp-select {\
   padding: 10px 14px;\
-  background: rgba(255, 255, 255, 0.06);\
-  border: 1px solid rgba(255, 255, 255, 0.1);\
+  background: #fff;\
+  border: 1px solid rgba(0,0,0,0.08);\
   border-radius: 999px;\
-  color: #fff;\
+  color: var(--rmp-text-primary);\
   font-size: 13px;\
   outline: none;\
   cursor: pointer;\
   transition: border-color 0.2s;\
 }\
 .rmp-select:focus { border-color: #EC4141; }\
-.rmp-select option { background: #202024; color: #fff; }\
+.rmp-select option { background: #fff; color: var(--rmp-text-primary); }\
 .rmp-btn {\
   padding: 10px 18px;\
   background: linear-gradient(135deg, #EC4141 0%, #C20C0C 100%);\
@@ -2047,22 +2056,22 @@
   align-items: center;\
   justify-content: center;\
   gap: 6px;\
-  box-shadow: 0 6px 18px rgba(194,12,12,0.32), inset 0 1px 0 rgba(255,255,255,0.18);\
+  box-shadow: 0 4px 14px rgba(194,12,12,0.25);\
 }\
-.rmp-btn:hover { background: linear-gradient(135deg, #f45555 0%, #d41414 100%); box-shadow: 0 8px 26px rgba(194,12,12,0.45), inset 0 1px 0 rgba(255,255,255,0.22); transform: translateY(-1px); }\
+.rmp-btn:hover { background: linear-gradient(135deg, #f45555 0%, #d41414 100%); box-shadow: 0 6px 20px rgba(194,12,12,0.35); transform: translateY(-1px); }\
 .rmp-btn:active { transform: translateY(0) scale(0.97); }\
 .rmp-btn-secondary {\
-  background: rgba(255, 255, 255, 0.08);\
-  color: #e0e0e0;\
+  background: #f5f5f7;\
+  color: var(--rmp-text-primary);\
   box-shadow: none;\
 }\
-.rmp-btn-secondary:hover { background: rgba(255, 255, 255, 0.14); box-shadow: none; }\
+.rmp-btn-secondary:hover { background: #ececee; box-shadow: none; }\
 .rmp-btn-icon {\
   padding: 10px;\
   min-width: 44px;\
   min-height: 44px;\
-  background: rgba(255, 255, 255, 0.06);\
-  color: #e0e0e0;\
+  background: #f5f5f7;\
+  color: var(--rmp-text-secondary);\
   border: none;\
   border-radius: 50%;\
   cursor: pointer;\
@@ -2071,7 +2080,7 @@
   justify-content: center;\
   transition: all 0.2s ease;\
 }\
-.rmp-btn-icon:hover { background: rgba(194,12,12,0.14); color: #EC4141; transform: scale(1.06); }\
+.rmp-btn-icon:hover { background: rgba(194,12,12,0.10); color: var(--rmp-red); transform: scale(1.06); }\
 .rmp-btn-icon:active { transform: scale(0.95); }\
 .rmp-btn-icon svg { width: 20px; height: 20px; fill: currentColor; }\
 .rmp-btn-icon.large svg { width: 28px; height: 28px; }\
@@ -2100,11 +2109,11 @@
   background: var(--rmp-red-gradient);\
   border-radius: 0 2px 2px 0;\
   opacity: 0;\
-  box-shadow: 0 0 8px rgba(194,12,12,0.5);\
+  box-shadow: 0 0 6px rgba(194,12,12,0.4);\
   transition: opacity 0.22s var(--rmp-transition), box-shadow 0.22s var(--rmp-transition);\
 }\
 .rmp-song-item:hover {\
-  background: rgba(255, 255, 255, 0.06);\
+  background: #f5f5f5;\
 }\
 .rmp-song-item:hover::before {\
   opacity: 0.65;\
@@ -2113,12 +2122,12 @@
   transform: scale(0.99);\
 }\
 .rmp-song-item.playing {\
-  background: rgba(194, 12, 12, 0.12);\
+  background: rgba(194, 12, 12, 0.08);\
 }\
 .rmp-song-item.playing::before {\
   opacity: 1;\
   height: 70%;\
-  box-shadow: 0 0 10px rgba(194,12,12,0.8), 0 0 4px rgba(236,65,65,0.6);\
+  box-shadow: 0 0 8px rgba(194,12,12,0.5);\
 }\
 .rmp-song-cover {\
   width: 44px;\
@@ -2126,13 +2135,13 @@
   border-radius: 8px;\
   object-fit: cover;\
   flex-shrink: 0;\
-  background: rgba(255,255,255,0.06);\
+  background: #f0f0f2;\
   display: flex;\
   align-items: center;\
   justify-content: center;\
   font-size: 18px;\
   font-weight: 700;\
-  color: rgba(255,255,255,0.5);\
+  color: var(--rmp-text-tertiary);\
   overflow: hidden;\
 }\
 .rmp-song-info {\
@@ -2142,17 +2151,17 @@
 }\
 .rmp-song-name {\
   font-size: 14px;\
-  color: #e0e0e0;\
+  color: var(--rmp-text-primary);\
   white-space: nowrap;\
   overflow: hidden;\
   text-overflow: ellipsis;\
 }\
 .rmp-song-item.playing .rmp-song-name {\
-  color: #EC4141;\
+  color: var(--rmp-red);\
 }\
 .rmp-song-meta {\
   font-size: 12px;\
-  color: rgba(255,255,255,0.4);\
+  color: var(--rmp-text-secondary);\
   white-space: nowrap;\
   overflow: hidden;\
   text-overflow: ellipsis;\
@@ -2160,12 +2169,12 @@
 }\
 .rmp-song-duration {\
   font-size: 12px;\
-  color: rgba(255,255,255,0.4);\
+  color: var(--rmp-text-secondary);\
   flex-shrink: 0;\
 }\
 .rmp-song-index {\
   font-size: 13px;\
-  color: rgba(255,255,255,0.3);\
+  color: var(--rmp-text-tertiary);\
   font-variant-numeric: tabular-nums;\
   min-width: 20px;\
   text-align: center;\
@@ -2175,10 +2184,10 @@
   font-size: 10px;\
   padding: 2px 8px;\
   border-radius: 999px;\
-  background: rgba(194,12,12,0.16);\
-  color: #ff6b6b;\
+  background: rgba(194,12,12,0.08);\
+  color: var(--rmp-red);\
   flex-shrink: 0;\
-  border: 1px solid rgba(194,12,12,0.25);\
+  border: 1px solid rgba(194,12,12,0.18);\
 }\
 .rmp-song-actions {\
   display: flex;\
@@ -2196,6 +2205,15 @@
   flex-direction: column;\
   align-items: center;\
   gap: 16px;\
+  /* 黑胶沉浸式深色背景 */\
+  position: relative;\
+  padding: 24px 16px;\
+  border-radius: var(--rmp-radius-lg);\
+  background:\
+    radial-gradient(circle at 50% 0%, rgba(194,12,12,0.18) 0%, transparent 55%),\
+    linear-gradient(180deg, #1f1f24 0%, #151519 60%, #0d0d10 100%);\
+  overflow: hidden;\
+  color: #fff;\
 }\
 @media (min-width: 600px) {\
   .rmp-now-playing {\
@@ -2204,67 +2222,103 @@
   }\
   .rmp-now-playing-left {\
     flex-shrink: 0;\
-    width: 240px;\
+    width: 260px;\
   }\
   .rmp-now-playing-right {\
     flex: 1;\
     min-width: 0;\
   }\
 }\
+/* 黑胶唱片容器 */\
 .rmp-np-cover-wrap {\
   position: relative;\
-  width: 200px;\
-  height: 200px;\
+  width: 220px;\
+  height: 220px;\
   flex-shrink: 0;\
+  margin: 0 auto;\
 }\
 .rmp-np-cover-wrap::before {\
   content: "";\
   position: absolute;\
-  inset: -20px;\
+  inset: -24px;\
   border-radius: 50%;\
-  background: radial-gradient(circle, rgba(194,12,12,0.30) 0%, transparent 70%);\
-  filter: blur(20px);\
+  background: radial-gradient(circle, rgba(194,12,12,0.32) 0%, transparent 70%);\
+  filter: blur(24px);\
   opacity: 0;\
   transition: opacity 0.6s ease;\
+  z-index: 0;\
 }\
 .rmp-np-cover-wrap.playing::before {\
   opacity: 1;\
 }\
+/* 模糊背景封面（无 src 时隐藏，避免显示空白）*/\
+.rmp-np-vinyl-bg {\
+  position: absolute;\
+  inset: -40%;\
+  width: 180%;\
+  height: 180%;\
+  object-fit: cover;\
+  filter: blur(60px) brightness(0.5);\
+  opacity: 0.55;\
+  z-index: 0;\
+  pointer-events: none;\
+}\
+.rmp-np-vinyl-bg:not([src]), .rmp-np-vinyl-bg[src=""] { display: none; }\
+/* 黑胶唱片主体（播放时旋转）*/\
+.rmp-np-vinyl {\
+  position: relative;\
+  width: 100%;\
+  height: 100%;\
+  border-radius: 50%;\
+  /* 径向渐变模拟黑胶纹路 */\
+  background:\
+    repeating-radial-gradient(circle at center, #0a0a0a 0px, #0a0a0a 2px, #161616 3px, #0a0a0a 4px),\
+    radial-gradient(circle at center, #1a1a1a 0%, #050505 100%);\
+  box-shadow:\
+    0 24px 60px rgba(0,0,0,0.7),\
+    0 12px 28px rgba(194,12,12,0.18),\
+    inset 0 2px 4px rgba(255,255,255,0.06),\
+    inset 0 -8px 24px rgba(0,0,0,0.5);\
+  display: flex;\
+  align-items: center;\
+  justify-content: center;\
+  z-index: 1;\
+}\
+.rmp-np-cover-wrap.playing .rmp-np-vinyl {\
+  animation: rmp-vinyl-spin 20s linear infinite;\
+}\
+/* 中心专辑封面（JS 设置 src）*/\
 .rmp-np-cover {\
-  width: 200px;\
-  height: 200px;\
+  width: 62%;\
+  height: 62%;\
   border-radius: 50%;\
   object-fit: cover;\
-  box-shadow:\
-    0 24px 60px rgba(0,0,0,0.6),\
-    0 12px 28px rgba(194,12,12,0.18),\
-    0 0 0 8px rgba(255,255,255,0.04),\
-    0 0 0 9px rgba(194,12,12,0.22),\
-    inset 0 2px 4px rgba(255,255,255,0.08),\
-    inset 0 -8px 24px rgba(0,0,0,0.4);\
   background: rgba(255,255,255,0.06);\
-  transition: border-radius 0.4s ease, box-shadow 0.5s var(--rmp-transition);\
-}\
-.rmp-np-cover.playing {\
-  animation: rmp-vinyl-spin 20s linear infinite;\
+  box-shadow: 0 0 0 6px rgba(0,0,0,0.4), inset 0 0 12px rgba(0,0,0,0.3);\
+  transition: box-shadow 0.5s var(--rmp-transition);\
+  z-index: 2;\
 }\
 @keyframes rmp-vinyl-spin {\
   to { transform: rotate(360deg); }\
 }\
-.rmp-np-cover-wrap::after {\
-  content: "";\
+/* 唱片中心圆点 */\
+.rmp-np-vinyl-center {\
   position: absolute;\
   top: 50%; left: 50%;\
   transform: translate(-50%, -50%);\
-  width: 16px; height: 16px;\
+  width: 18px; height: 18px;\
   border-radius: 50%;\
-  background: rgba(26,26,46,0.9);\
-  border: 2px solid rgba(194,12,12,0.5);\
-  z-index: 1;\
+  background: #C20C0C;\
+  border: 3px solid #1a1a1f;\
+  box-shadow: 0 0 6px rgba(194,12,12,0.6);\
+  z-index: 3;\
+  pointer-events: none;\
 }\
 .rmp-np-info {\
   text-align: center;\
-  margin-bottom: 8px;\
+  margin: 14px 0 8px;\
+  position: relative;\
+  z-index: 1;\
 }\
 @media (min-width: 600px) {\
   .rmp-np-info { text-align: left; }\
@@ -2277,12 +2331,21 @@
 }\
 .rmp-np-artist {\
   font-size: 14px;\
-  color: rgba(255,255,255,0.5);\
+  color: rgba(255,255,255,0.55);\
 }\
 .rmp-np-album {\
   font-size: 12px;\
-  color: rgba(255,255,255,0.35);\
+  color: rgba(255,255,255,0.38);\
   margin-top: 2px;\
+}\
+/* 正在播放面板内按钮：深色风格覆盖（避免使用主面板浅色按钮）*/\
+.rmp-now-playing .rmp-btn-icon {\
+  background: rgba(255,255,255,0.08);\
+  color: rgba(255,255,255,0.85);\
+}\
+.rmp-now-playing .rmp-btn-icon:hover {\
+  background: rgba(194,12,12,0.22);\
+  color: #fff;\
 }\
 .rmp-progress-bar {\
   width: 100%;\
@@ -2445,11 +2508,11 @@
 }\
 .rmp-playlist-count {\
   font-size: 13px;\
-  color: rgba(255,255,255,0.4);\
+  color: var(--rmp-text-secondary);\
 }\
 .rmp-empty-state {\
   text-align: center;\
-  color: rgba(255,255,255,0.3);\
+  color: var(--rmp-text-tertiary);\
   padding: 40px 0;\
   font-size: 14px;\
 }\
@@ -2466,10 +2529,10 @@
 .rmp-settings-input {\
   width: 100%;\
   padding: 11px 14px;\
-  background: rgba(255, 255, 255, 0.05);\
+  background: #fff;\
   border: 1px solid var(--rmp-border);\
   border-radius: var(--rmp-radius);\
-  color: #fff;\
+  color: var(--rmp-text-primary);\
   font-size: 14px;\
   outline: none;\
   box-sizing: border-box;\
@@ -2477,10 +2540,10 @@
 }\
 .rmp-settings-input:focus {\
   border-color: var(--rmp-red);\
-  background: rgba(255, 255, 255, 0.07);\
-  box-shadow: 0 0 0 3px rgba(194,12,12,0.18), 0 0 12px rgba(236,65,65,0.22);\
+  background: #fff;\
+  box-shadow: 0 0 0 3px rgba(194,12,12,0.14);\
 }\
-.rmp-settings-input::placeholder { color: rgba(255,255,255,0.3); }\
+.rmp-settings-input::placeholder { color: var(--rmp-text-tertiary); }\
 .rmp-login-area {\
   display: flex;\
   flex-direction: column;\
@@ -2505,14 +2568,14 @@
 }\
 .rmp-login-status {\
   font-size: 14px;\
-  color: rgba(255,255,255,0.6);\
+  color: var(--rmp-text-secondary);\
   text-align: center;\
 }\
 .rmp-login-status.success { color: #C20C0C; }\
 .rmp-login-status.error { color: #E60026; }\
 .rmp-login-info {\
   font-size: 12px;\
-  color: rgba(255,255,255,0.4);\
+  color: var(--rmp-text-secondary);\
   text-align: center;\
   max-width: 280px;\
   line-height: 1.5;\
@@ -2523,8 +2586,8 @@
   align-items: center;\
   gap: 14px;\
   padding: 16px;\
-  background: rgba(194,12,12,0.06);\
-  border: 1px solid rgba(194,12,12,0.15);\
+  background: rgba(194,12,12,0.05);\
+  border: 1px solid rgba(194,12,12,0.14);\
   border-radius: 12px;\
 }\
 .rmp-user-avatar {\
@@ -2533,12 +2596,12 @@
   border-radius: 50%;\
   object-fit: cover;\
   border: 2px solid rgba(194,12,12,0.3);\
-  background: rgba(255,255,255,0.05);\
+  background: #f0f0f2;\
 }\
 .rmp-user-name {\
   font-size: 16px;\
   font-weight: 600;\
-  color: #fff;\
+  color: var(--rmp-text-primary);\
   margin-bottom: 4px;\
 }\
 .rmp-user-badge {\
@@ -2552,13 +2615,13 @@
 .rmp-loading {\
   text-align: center;\
   padding: 40px 0;\
-  color: rgba(255,255,255,0.4);\
+  color: var(--rmp-text-secondary);\
 }\
 .rmp-spinner {\
   display: inline-block;\
   width: 32px;\
   height: 32px;\
-  border: 3px solid rgba(255,255,255,0.1);\
+  border: 3px solid rgba(0,0,0,0.1);\
   border-top-color: #C20C0C;\
   border-radius: 50%;\
   animation: rmp-app-spin 0.8s linear infinite;\
@@ -2567,7 +2630,7 @@
   to { transform: rotate(360deg); }\
 }\
 .rmp-clear-btn {\
-  background: rgba(255, 107, 107, 0.15);\
+  background: rgba(255, 107, 107, 0.12);\
   color: #E60026;\
   border: none;\
   padding: 8px 14px;\
@@ -2576,32 +2639,32 @@
   font-size: 13px;\
   min-height: 36px;\
 }\
-.rmp-clear-btn:hover { background: rgba(255, 107, 107, 0.25); }\
+.rmp-clear-btn:hover { background: rgba(255, 107, 107, 0.2); }\
 /* 免责声明（仅展示，无强制同意）*/\
 .rmp-disclaimer {\
   margin-top: 10px;\
   padding: 10px;\
-  border: 1px solid rgba(255,255,255,0.08);\
+  border: 1px solid rgba(0,0,0,0.06);\
   border-radius: 8px;\
-  background: rgba(255,255,255,0.02);\
+  background: #f5f5f7;\
 }\
 /* 网易云免责声明（红色边框 + 同意勾选）*/\
 .rmp-ne-disclaimer {\
   margin-top: 10px;\
   padding: 12px;\
-  border: 1px solid rgba(194,12,12,0.45);\
+  border: 1px solid rgba(194,12,12,0.4);\
   border-radius: 8px;\
-  background: rgba(194,12,12,0.06);\
+  background: rgba(194,12,12,0.04);\
 }\
 .rmp-disclaimer-title {\
   font-size: 11px;\
   font-weight: 600;\
-  color: rgba(255,255,255,0.35);\
+  color: var(--rmp-text-secondary);\
   margin-bottom: 4px;\
 }\
 .rmp-disclaimer-body {\
   font-size: 10px;\
-  color: rgba(255,255,255,0.25);\
+  color: var(--rmp-text-tertiary);\
   line-height: 1.6;\
 }\
 .rmp-topbar {\
@@ -2620,9 +2683,9 @@
 .rmp-debug-block {\
   margin-top: 10px;\
   padding: 10px;\
-  border: 1px solid rgba(255,255,255,0.08);\
+  border: 1px solid rgba(0,0,0,0.06);\
   border-radius: 8px;\
-  background: rgba(0,0,0,0.25);\
+  background: #f5f5f7;\
 }\
 .rmp-debug-header {\
   display: flex;\
@@ -2633,12 +2696,13 @@
 .rmp-debug-title {\
   font-size: 11px;\
   font-weight: 600;\
-  color: rgba(255,255,255,0.4);\
+  color: var(--rmp-text-secondary);\
 }\
 .rmp-debug-logs {\
   max-height: 180px;\
   overflow-y: auto;\
-  background: rgba(0,0,0,0.35);\
+  background: #fff;\
+  border: 1px solid rgba(0,0,0,0.06);\
   border-radius: 6px;\
   padding: 6px;\
   font-family: Consolas, Menlo, monospace;\
@@ -2646,15 +2710,15 @@
   line-height: 1.5;\
 }\
 .rmp-debug-line {\
-  color: rgba(255,255,255,0.55);\
+  color: var(--rmp-text-secondary);\
   white-space: pre-wrap;\
   word-break: break-all;\
 }\
 .rmp-debug-line.err {\
-  color: #ff6b6b;\
+  color: #E60026;\
 }\
 .rmp-debug-empty {\
-  color: rgba(255,255,255,0.3);\
+  color: var(--rmp-text-tertiary);\
   font-size: 11px;\
   text-align: center;\
   padding: 12px 0;\
@@ -2694,12 +2758,12 @@
 .rmp-brand-name {\
   font-size: 13px;\
   font-weight: 700;\
-  color: #fff;\
+  color: var(--rmp-text-primary);\
   letter-spacing: 0.5px;\
 }\
 .rmp-brand-ver {\
   font-size: 9px;\
-  color: rgba(255,255,255,0.45);\
+  color: var(--rmp-text-tertiary);\
   font-family: Consolas, Menlo, monospace;\
 }\
 .rmp-close-btn {\
@@ -2728,13 +2792,13 @@
 }\
 .rmp-toggle-label {\
   font-size: 13px;\
-  color: rgba(255,255,255,0.7);\
+  color: var(--rmp-text-primary);\
 }\
 .rmp-toggle {\
   position: relative;\
   width: 44px;\
   height: 26px;\
-  background: rgba(255,255,255,0.15);\
+  background: rgba(0,0,0,0.12);\
   border-radius: 13px;\
   cursor: pointer;\
   transition: background 0.2s ease;\
@@ -2789,24 +2853,13 @@
   0%, 100% { height: 20%; }\
   50% { height: 100%; }\
 }\
-/* 黑胶唱片中心孔 */\
-.rmp-np-cover-wrap::after {\
-  content: "";\
-  position: absolute;\
-  top: 50%; left: 50%;\
-  transform: translate(-50%, -50%);\
-  width: 16px; height: 16px;\
-  border-radius: 50%;\
-  background: #0d0d0d;\
-  border: 2px solid rgba(255,255,255,0.15);\
-  z-index: 2;\
-  pointer-events: none;\
-}\
+/* 黑胶唱片中心孔已由 .rmp-np-vinyl-center 提供，此处保留占位避免重复 */\
+.rmp-np-cover-wrap::after { content: none; }\
 /* 平台标签颜色微调 */\
 .rmp-song-platform {\
-  background: rgba(194,12,12,0.16);\
-  color: #ff6b6b;\
-  border: 1px solid rgba(194,12,12,0.25);\
+  background: rgba(194,12,12,0.08);\
+  color: var(--rmp-red);\
+  border: 1px solid rgba(194,12,12,0.18);\
 }\
 .rmp-version-display {\
   padding: 4px 0;\
@@ -2818,7 +2871,7 @@
   align-items: center;\
   gap: 14px;\
   padding: 10px 4px 14px;\
-  border-bottom: 1px solid rgba(255,255,255,0.06);\
+  border-bottom: 1px solid rgba(0,0,0,0.06);\
   margin-bottom: 12px;\
 }\
 .rmp-netease-user-area {\
@@ -2829,64 +2882,64 @@
 }\
 /* 未登录区：网易云红渐变玻璃卡片 */\
 .rmp-netease-logged-out {\
-  background: linear-gradient(135deg, rgba(194,12,12,0.16) 0%, rgba(194,12,12,0.04) 55%, rgba(255,255,255,0.02) 100%);\
-  border: 1px solid rgba(194,12,12,0.24);\
+  background: linear-gradient(135deg, rgba(194,12,12,0.08) 0%, rgba(194,12,12,0.02) 55%, rgba(255,255,255,0.4) 100%);\
+  border: 1px solid rgba(194,12,12,0.2);\
   border-radius: 16px;\
   padding: 12px 14px;\
   backdrop-filter: blur(12px);\
   -webkit-backdrop-filter: blur(12px);\
-  box-shadow: 0 8px 28px rgba(194,12,12,0.14), inset 0 1px 0 rgba(255,255,255,0.06);\
+  box-shadow: 0 4px 16px rgba(194,12,12,0.1);\
   transition: box-shadow 0.3s ease, border-color 0.3s ease;\
 }\
 .rmp-netease-logged-out:hover {\
-  border-color: rgba(194,12,12,0.36);\
-  box-shadow: 0 10px 34px rgba(194,12,12,0.2), inset 0 1px 0 rgba(255,255,255,0.08);\
+  border-color: rgba(194,12,12,0.32);\
+  box-shadow: 0 6px 22px rgba(194,12,12,0.16);\
 }\
 .rmp-netease-avatar {\
   width: 44px; height: 44px;\
   border-radius: 50%;\
   object-fit: cover;\
-  background: rgba(255,255,255,0.06);\
+  background: #f0f0f2;\
   border: 2px solid rgba(194,12,12,0.3);\
   flex-shrink: 0;\
 }\
 .rmp-netease-user-info { flex: 1; min-width: 0; }\
 .rmp-netease-nickname {\
-  font-size: 16px; font-weight: 600; color: #fff;\
+  font-size: 16px; font-weight: 600; color: var(--rmp-text-primary);\
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\
 }\
 .rmp-netease-subtitle {\
-  font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 2px;\
+  font-size: 12px; color: var(--rmp-text-secondary); margin-top: 2px;\
 }\
 .rmp-netease-login-hint {\
   display: flex; align-items: center; gap: 10px; width: 100%;\
 }\
 .rmp-netease-login-icon {\
   width: 44px; height: 44px; border-radius: 50%;\
-  background: rgba(194,12,12,0.1); display: flex; align-items: center;\
+  background: rgba(194,12,12,0.08); display: flex; align-items: center;\
   justify-content: center; flex-shrink: 0;\
 }\
 .rmp-netease-login-icon svg { width: 22px; height: 22px; fill: #C20C0C; }\
 .rmp-netease-login-text {\
-  flex: 1; font-size: 14px; color: rgba(255,255,255,0.65);\
+  flex: 1; font-size: 14px; color: var(--rmp-text-primary);\
 }\
 .rmp-netease-login-info {\
   flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;\
 }\
 .rmp-netease-login-sub {\
-  font-size: 11px; color: rgba(255,255,255,0.38);\
+  font-size: 11px; color: var(--rmp-text-secondary);\
 }\
 .rmp-netease-subnav {\
   display: flex; gap: 2px; padding: 0 0 10px;\
-  border-bottom: 1px solid rgba(255,255,255,0.04); margin-bottom: 12px;\
+  border-bottom: 1px solid rgba(0,0,0,0.04); margin-bottom: 12px;\
 }\
 .rmp-nsub-btn {\
   padding: 7px 16px; border: none; background: transparent;\
-  color: rgba(255,255,255,0.45); font-size: 13px; cursor: pointer;\
+  color: var(--rmp-text-secondary); font-size: 13px; cursor: pointer;\
   border-radius: 8px; transition: all 0.2s; position: relative;\
 }\
-.rmp-nsub-btn:hover { color: rgba(255,255,255,0.8); background: rgba(255,255,255,0.04); }\
-.rmp-nsub-btn.active { color: #fff; background: rgba(194,12,12,0.12); }\
+.rmp-nsub-btn:hover { color: var(--rmp-text-primary); background: rgba(0,0,0,0.03); }\
+.rmp-nsub-btn.active { color: var(--rmp-red); background: rgba(194,12,12,0.08); font-weight: 600; }\
 .rmp-nsub-panel { display: none; }\
 .rmp-nsub-panel.active { display: block; }\
 .rmp-netease-recs { display: flex; flex-direction: column; gap: 6px; }\
@@ -2895,77 +2948,102 @@
   display: flex; align-items: center; gap: 12px; padding: 10px;\
   border-radius: var(--rmp-radius); cursor: pointer;\
   transition: transform 0.25s var(--rmp-transition), background 0.25s var(--rmp-transition), box-shadow 0.25s var(--rmp-transition), border-color 0.25s var(--rmp-transition);\
-  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.04);\
+  background: #fff; border: 1px solid rgba(0,0,0,0.06);\
   -webkit-backdrop-filter: blur(10px);\
   backdrop-filter: blur(10px);\
 }\
 .rmp-netease-pl-item:hover {\
-  background: rgba(255,255,255,0.06);\
+  background: #fff;\
   border-color: rgba(236,65,65,0.28);\
   transform: translateY(-2px) scale(1.012);\
-  box-shadow: 0 10px 26px rgba(0,0,0,0.32), 0 0 0 1px rgba(236,65,65,0.10);\
+  box-shadow: 0 6px 18px rgba(0,0,0,0.08), 0 0 0 1px rgba(236,65,65,0.1);\
 }\
 .rmp-netease-pl-item:active { transform: translateY(0) scale(0.99); }\
 .rmp-netease-pl-cover {\
   width: 52px; height: 52px; border-radius: 8px; object-fit: cover;\
-  background: rgba(255,255,255,0.06); flex-shrink: 0;\
-  box-shadow: 0 4px 12px rgba(0,0,0,0.35);\
+  background: #f0f0f2; flex-shrink: 0;\
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);\
   transition: box-shadow 0.25s var(--rmp-transition);\
 }\
 .rmp-netease-pl-item:hover .rmp-netease-pl-cover {\
-  box-shadow: 0 6px 18px rgba(194,12,12,0.28);\
+  box-shadow: 0 4px 14px rgba(194,12,12,0.22);\
 }\
 .rmp-netease-pl-info { flex: 1; min-width: 0; }\
 .rmp-netease-pl-name {\
-  font-size: 14px; color: #e0e0e0; font-weight: 500;\
+  font-size: 14px; color: var(--rmp-text-primary); font-weight: 500;\
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\
 }\
 .rmp-netease-pl-meta {\
-  font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 3px;\
+  font-size: 11px; color: var(--rmp-text-secondary); margin-top: 3px;\
 }\
 .rmp-netease-pl-arrow {\
-  color: rgba(255,255,255,0.2); font-size: 16px; flex-shrink: 0;\
+  color: var(--rmp-text-tertiary); font-size: 16px; flex-shrink: 0;\
 }\
-.rmp-netease-pl-loading { text-align: center; padding: 32px; color: rgba(255,255,255,0.3); }\
+.rmp-netease-pl-loading { text-align: center; padding: 32px; color: var(--rmp-text-tertiary); }\
 /* 歌曲操作按钮：红心收藏 + 添加到歌单 */\
 .rmp-song-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }\
-.rmp-like-btn svg { fill: none; stroke: rgba(255,255,255,0.4); stroke-width: 2; transition: all 0.2s; }\
+.rmp-like-btn svg { fill: none; stroke: var(--rmp-text-tertiary); stroke-width: 2; transition: all 0.2s; }\
 .rmp-like-btn:hover svg { stroke: #EC4141; }\
 .rmp-like-btn.liked svg { fill: #C20C0C; stroke: #C20C0C; }\
 .rmp-like-btn.liked { animation: rmp-heart-pop 0.3s ease; }\
 @keyframes rmp-heart-pop { 0% { transform: scale(1); } 50% { transform: scale(1.3); } 100% { transform: scale(1); } }\
 /* 新建歌单按钮 */\
 .rmp-create-pl-btn {\
-  background: linear-gradient(135deg, rgba(236,65,65,0.15), rgba(194,12,12,0.15));\
+  background: linear-gradient(135deg, rgba(236,65,65,0.1), rgba(194,12,12,0.1));\
   border: 1px dashed rgba(236,65,65,0.4);\
-  color: rgba(236,65,65,0.9);\
+  color: var(--rmp-red);\
 }\
 .rmp-create-pl-btn:hover {\
-  background: linear-gradient(135deg, rgba(236,65,65,0.25), rgba(194,12,12,0.25));\
+  background: linear-gradient(135deg, rgba(236,65,65,0.18), rgba(194,12,12,0.18));\
   border-color: rgba(236,65,65,0.6);\
 }\
 /* 历史播放次数标记 */\
 .rmp-history-count {\
-  font-size: 10px; color: rgba(236,65,65,0.6); flex-shrink: 0;\
+  font-size: 10px; color: var(--rmp-red); flex-shrink: 0;\
   background: rgba(194,12,12,0.08); padding: 2px 6px; border-radius: 4px;\
 }\
-/* QR 登录弹窗 */\
+/* QR 登录弹窗：保持深色，更聚焦 */\
 .rmp-qr-modal { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; }\
-.rmp-qr-modal-mask { position: absolute; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); }\
-.rmp-qr-modal-box { position: relative; background: #1a1a2e; border-radius: 20px; padding: 28px; width: 300px; max-width: 90vw; text-align: center; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 24px 80px rgba(0,0,0,0.6); }\
-.rmp-qr-modal-close { position: absolute; top: 12px; right: 16px; font-size: 22px; color: rgba(255,255,255,0.4); cursor: pointer; line-height: 1; }\
-.rmp-qr-modal-close:hover { color: #fff; }\
-.rmp-qr-modal-title { font-size: 17px; font-weight: 600; color: #fff; margin-bottom: 16px; }\
+.rmp-qr-modal-mask { position: absolute; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(8px); }\
+.rmp-qr-modal-box { position: relative; background: #fff; border-radius: 20px; padding: 28px; width: 300px; max-width: 90vw; text-align: center; border: 1px solid rgba(0,0,0,0.06); box-shadow: 0 24px 80px rgba(0,0,0,0.25); }\
+.rmp-qr-modal-close { position: absolute; top: 12px; right: 16px; font-size: 22px; color: var(--rmp-text-tertiary); cursor: pointer; line-height: 1; }\
+.rmp-qr-modal-close:hover { color: var(--rmp-red); }\
+.rmp-qr-modal-title { font-size: 17px; font-weight: 600; color: var(--rmp-text-primary); margin-bottom: 16px; }\
 .rmp-qr-modal-body { display: flex; flex-direction: column; align-items: center; gap: 12px; }\
-.rmp-qr-img-wrap { width: 200px; height: 200px; border-radius: 16px; background: #fff; padding: 12px; display: flex; align-items: center; justify-content: center; }\
+.rmp-qr-img-wrap { width: 200px; height: 200px; border-radius: 16px; background: #fff; padding: 12px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0,0,0,0.06); }\
 .rmp-qr-img-wrap img { width: 100%; height: 100%; object-fit: contain; }\
-.rmp-qr-placeholder-el { color: #999; font-size: 13px; }\
-.rmp-qr-status-el { font-size: 13px; color: rgba(255,255,255,0.6); line-height: 1.6; }\
+.rmp-qr-placeholder-el { color: var(--rmp-text-secondary); font-size: 13px; }\
+.rmp-qr-status-el { font-size: 13px; color: var(--rmp-text-secondary); line-height: 1.6; }\
 .rmp-qr-status-el.success { color: #C20C0C; }\
 .rmp-qr-status-el.error { color: #E60026; }\
 .rmp-qr-retry-btn { margin-top: 10px; padding: 6px 16px; background: linear-gradient(135deg, #C20C0C, #E60026); color: #fff; border: none; border-radius: 8px; font-size: 12px; cursor: pointer; }\
 .rmp-qr-retry-btn:hover { opacity: 0.88; }\
-';
+/* ===== 全屏歌词模式（覆盖正在播放面板，深色背景）===== */\
+.rmp-lyrics-fullscreen {\
+  position: absolute;\
+  inset: 0;\
+  z-index: 10;\
+  background: linear-gradient(180deg, rgba(15,15,18,0.96) 0%, rgba(8,8,10,0.98) 100%);\
+  backdrop-filter: blur(20px);\
+  -webkit-backdrop-filter: blur(20px);\
+  display: flex;\
+  flex-direction: column;\
+  justify-content: center;\
+  align-items: center;\
+  padding: 24px 16px;\
+  overflow-y: auto;\
+  border-radius: var(--rmp-radius-lg);\
+}\
+.rmp-lyrics-fullscreen .rmp-lyric-line {\
+  color: rgba(255,255,255,0.35);\
+  font-size: 15px;\
+}\
+.rmp-lyrics-fullscreen .rmp-lyric-line.active {\
+  color: #C20C0C;\
+  font-size: 19px;\
+  font-weight: 700;\
+  text-shadow: 0 0 16px rgba(194,12,12,0.6);\
+}';
   }
 
   // SVG 图标
@@ -3078,8 +3156,12 @@
         <div class="rmp-nsub-panel" data-nsub="player">\
           <div class="rmp-now-playing">\
             <div class="rmp-now-playing-left">\
-              <div class="rmp-np-cover-wrap">\
-                <img class="rmp-np-cover" alt="" />\
+              <div class="rmp-np-cover-wrap rmp-np-vinyl-wrap">\
+                <img class="rmp-np-vinyl-bg" alt="" />\
+                <div class="rmp-np-vinyl">\
+                  <img class="rmp-np-cover" alt="" />\
+                  <div class="rmp-np-vinyl-center"></div>\
+                </div>\
               </div>\
               <div class="rmp-np-info" style="margin-top:12px;">\
                 <div class="rmp-np-title">未播放</div>\
