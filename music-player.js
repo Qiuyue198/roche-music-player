@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-08-08-v3.4.6';
+  var BUILD_TIME = '2026-08-08-v3.4.7';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -555,12 +555,19 @@
     if (!STATE.audioUnlocked) {
       if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('请先点击播放器任意位置解锁音频');
     }
+    // 切歌标记：记录用户切歌动作，contextProvider下次回调时注入提醒给char
+    // 记录"从哪首切到哪首"，让char能感知用户的切歌行为
+    var prevSong = STATE.currentSong;
     STATE.currentSong = song;
     if (typeof index === 'number') {
       STATE.currentIndex = index;
     }
-    // 切歌标记：记录用户切歌动作，contextProvider下次回调时注入提醒给char
-    STATE.justSwitched = { name: song.name, artist: song.artist, time: Date.now() };
+    STATE.justSwitched = {
+      name: song.name,
+      artist: song.artist,
+      time: Date.now(),
+      from: prevSong ? { name: prevSong.name, artist: prevSong.artist } : null
+    };
     STATE._blobFallbackTried = false;
     STATE.lyrics = [];
     STATE.tlyrics = [];
@@ -4753,9 +4760,16 @@
     var song = STATE.currentSong;
     var result = '【user当前正在听音乐】\n';
 
-    // 切歌提醒：如果用户刚刚通过灵动岛切歌，在注入内容开头提醒char
+    // 切歌提醒：如果用户刚刚切歌，在注入内容开头提醒char，包含"从哪首切到哪首"
     if (STATE.justSwitched && (Date.now() - STATE.justSwitched.time) < 300000) {
-      result += '（user刚刚切换了歌曲为《' + (STATE.justSwitched.name || '未知') + '》— ' + (STATE.justSwitched.artist || '未知') + '）\n';
+      var js = STATE.justSwitched;
+      var cur = '《' + (js.name || '未知') + '》— ' + (js.artist || '未知');
+      if (js.from) {
+        var prev = '《' + (js.from.name || '未知') + '》— ' + (js.from.artist || '未知');
+        result += '（user刚刚从' + prev + '切换成了' + cur + '，可以自然地聊聊user切歌的想法）\n';
+      } else {
+        result += '（user刚刚点播了' + cur + '，可以自然地聊聊user选这首歌的想法）\n';
+      }
     }
     STATE.justSwitched = null;
 
