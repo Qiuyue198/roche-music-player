@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-08-08-v3.4.8';
+  var BUILD_TIME = '2026-08-08-v3.4.9';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -4762,10 +4762,28 @@
   // ==================== ContextProvider ====================
 
   function contextProvider(ctx) {
-    // 灵动岛被主动关闭，不注入歌曲信息
-    if (STATE.islandClosed) return null;
-    // 没有在听歌返回 null
-    if (!STATE.currentSong || !STATE.audio) return null;
+    // 调试日志：帮助定位 char 听不到歌的原因
+    if (STATE.islandClosed) {
+      console.log('[contextProvider] 跳过注入：灵动岛已关闭 (islandClosed=true)');
+      return null;
+    }
+    // 自愈：如果 currentSong 丢失但 audio 正在播放且 playlist 有歌，从 playlist 恢复 currentSong
+    if (!STATE.currentSong && STATE.audio && !STATE.audio.paused && STATE.playlist.length > 0) {
+      var restoreIdx = STATE.currentIndex >= 0 ? STATE.currentIndex : 0;
+      if (STATE.playlist[restoreIdx]) {
+        console.log('[contextProvider] 自愈恢复 currentSong from playlist[' + restoreIdx + ']:', STATE.playlist[restoreIdx].name);
+        STATE.currentSong = STATE.playlist[restoreIdx];
+      }
+    }
+    if (!STATE.currentSong) {
+      console.log('[contextProvider] 跳过注入：currentSong 为空（audio.paused=' + (STATE.audio ? STATE.audio.paused : 'no-audio') + '）');
+      return null;
+    }
+    if (!STATE.audio) {
+      console.log('[contextProvider] 跳过注入：audio 为空');
+      return null;
+    }
+    console.log('[contextProvider] 正常注入歌曲信息:', STATE.currentSong.name);
 
     var song = STATE.currentSong;
     var result = '【user当前正在听音乐】\n';
