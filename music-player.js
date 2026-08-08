@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-08-08-v3.4.7';
+  var BUILD_TIME = '2026-08-08-v3.4.8';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -1480,6 +1480,16 @@
   function showIslandPlaylistPopup() {
     if (!STATE.islandPlaylistPopup) return;
     if (STATE.playlist.length === 0 && !STATE.cookie) return;
+    // loadSettings 是异步的：如果用户在设置加载完成前长按灵动岛，STATE.playlist 还是初始空数组
+    // 此时显示"加载中"，避免误显示"播放列表为空"
+    if (!STATE._settingsLoaded) {
+      var popup0 = STATE.islandPlaylistPopup;
+      popup0.innerHTML = '<div class="rmp-island-popup-content"><div class="rmp-island-pl-loading"><div class="rmp-spinner"></div></div></div>';
+      popup0.style.display = '';
+      requestAnimationFrame(function () { popup0.classList.add('visible'); });
+      STATE._popupVisible = true;
+      return;
+    }
     // 获取灵动岛位置
     var islandRect = STATE.islandEl.getBoundingClientRect();
     var popup = STATE.islandPlaylistPopup;
@@ -4844,8 +4854,14 @@
             } else if (STATE.cookie) {
               fetchUserInfo().then(function () { updateNeteaseLoginUI(); });
             }
+            STATE._settingsLoaded = true;
             STATE.initialized = true;
+            // 如果用户在设置加载前打开了灵动岛弹窗（显示加载中），现在加载完了，重新渲染
+            if (STATE._popupVisible) {
+              showIslandPlaylistPopup();
+            }
           }).catch(function (e) {
+            STATE._settingsLoaded = true;
             STATE.initialized = true;
           });
         }
@@ -4933,8 +4949,13 @@
         loadSettings(roche).then(function () {
           updatePlayModeUI();
           syncSettingsToUI();
+          STATE._settingsLoaded = true;
           STATE.initialized = true;
+          if (STATE._popupVisible) {
+            showIslandPlaylistPopup();
+          }
         }).catch(function () {
+          STATE._settingsLoaded = true;
           STATE.initialized = true;
         });
       }
