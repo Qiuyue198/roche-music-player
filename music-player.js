@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-08-08-v3.4.9';
+  var BUILD_TIME = '2026-08-08-v3.5.0';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -87,6 +87,10 @@
     userPlaylistsCache: [],
     // 网易云播放 URL 缓存（songId -> {url, ts}），避免每次播放都重新请求 /play
     songUrlCache: {},
+    // 灵动岛网易云歌单缓存：{ list: [...], time: ts } 歌单列表缓存，避免每次切tab重新加载
+    islandNeteasePlaylistCache: null,
+    // 灵动岛歌单歌曲缓存：{ [plId]: { songs: [...], name: str, time: ts } } 点开的歌单歌曲缓存
+    islandPlaylistSongsCache: {},
     // 夜间模式
     themeDark: false,
     initialized: false
@@ -1525,7 +1529,27 @@
         popup.querySelectorAll('.rmp-island-popup-tab').forEach(function (t) { t.classList.remove('active'); });
         tab.classList.add('active');
         if (tabName === 'playlist') renderPopupPlaylistTab();
-        else renderPopupNeteaseTab();
+        else renderPopupNeteaseTab(false);
+        return;
+      }
+      // 刷新歌单列表
+      if (e.target.closest('.rmp-netease-refresh')) {
+        renderPopupNeteaseTab(true);
+        return;
+      }
+      // 返回歌单列表
+      if (e.target.closest('.rmp-netease-back')) {
+        renderPopupNeteaseTab(false);
+        return;
+      }
+      // 刷新歌单歌曲
+      var refreshSongsEl = e.target.closest('.rmp-netease-refresh-songs');
+      if (refreshSongsEl) {
+        var refreshPlId = refreshSongsEl.getAttribute('data-plid');
+        if (refreshPlId) {
+          delete STATE.islandPlaylistSongsCache[refreshPlId];
+          loadNeteasePlaylistIntoPopup(refreshPlId);
+        }
         return;
       }
       // 播放列表项点击
@@ -1533,9 +1557,33 @@
       if (!item) return;
       var idx = parseInt(item.getAttribute('data-index'), 10);
       var plId = item.getAttribute('data-plid');
+      var plSong = item.getAttribute('data-plsong');
       if (plId) {
-        // 网易云歌单：加载歌曲到本地播放列表
+        // 网易云歌单：在弹窗里展示歌单歌曲（不覆盖播放列表）
         loadNeteasePlaylistIntoPopup(plId);
+        return;
+      }
+      if (plSong) {
+        // 歌单歌曲点击：加入播放列表末尾并播放（不覆盖现有列表）
+        var parts = plSong.split(':');
+        var songPlId = parts[0];
+        var songIdx = parseInt(parts[1], 10);
+        var cache = STATE.islandPlaylistSongsCache[songPlId];
+        if (cache && cache.songs && cache.songs[songIdx]) {
+          var song = cache.songs[songIdx];
+          // 避免重复添加
+          var existIdx = -1;
+          for (var k = 0; k < STATE.playlist.length; k++) {
+            if (STATE.playlist[k].id === song.id) { existIdx = k; break; }
+          }
+          if (existIdx >= 0) {
+            playSong(STATE.playlist[existIdx], existIdx);
+          } else {
+            var newIdx = addToPlaylist(song);
+            playSong(song, newIdx);
+          }
+          hideIslandPlaylistPopup();
+        }
         return;
       }
       if (!isNaN(idx) && STATE.playlist[idx]) {
@@ -1569,12 +1617,18 @@
     content.innerHTML = html;
   }
 
-  // 渲染弹窗的"网易云歌单"tab
-  function renderPopupNeteaseTab() {
+  // 渲染弹窗的"网易云歌单"tab（带缓存，user可手动刷新）
+  function renderPopupNeteaseTab(forceRefresh) {
     var content = document.getElementById('rmp-island-popup-content');
     if (!content) return;
     if (!STATE.cookie) {
       content.innerHTML = '<div class="rmp-island-pl-loading">请先登录网易云</div>';
+      return;
+    }
+    // 缓存有效期 10 分钟，forceRefresh=true 或过期时重新加载
+    var CACHE_TTL = 10 * 60 * 1000;
+    if (!forceRefresh && STATE.islandNeteasePlaylistCache && (Date.now() - STATE.islandNeteasePlaylistCache.time) < CACHE_TTL) {
+      renderNeteasePlaylistList(content, STATE.islandNeteasePlaylistCache.list);
       return;
     }
     content.innerHTML = '<div class="rmp-island-pl-loading"><div class="rmp-spinner"></div></div>';
@@ -1585,25 +1639,37 @@
       return neteaseApi('/api/user/playlist?uid=' + uid + '&limit=30&offset=0');
     }).then(function (resp) {
       if (!resp || !resp.playlist) { content.innerHTML = '<div class="rmp-island-pl-loading">暂无歌单</div>'; return; }
-      var list = resp.playlist;
-      var html = '';
-      for (var i = 0; i < list.length; i++) {
-        var pl = list[i];
-        html += '<div class="rmp-island-pl-item" data-plid="' + pl.id + '">';
-        html += '<span class="rmp-pl-num">' + (i + 1) + '</span>';
-        html += '<span class="rmp-pl-name">' + escapeHtml(pl.name || '') + ' (' + (pl.trackCount || 0) + '首)</span>';
-        html += '<span class="rmp-pl-dot"></span>';
-        html += '</div>';
-      }
-      content.innerHTML = html;
+      STATE.islandNeteasePlaylistCache = { list: resp.playlist, time: Date.now() };
+      renderNeteasePlaylistList(content, resp.playlist);
     }).catch(function () {
       content.innerHTML = '<div class="rmp-island-pl-loading">加载失败</div>';
     });
   }
 
-  // 点击网易云歌单后，加载歌曲到本地播放列表并播放第一首
+  // 渲染网易云歌单列表 DOM（含刷新按钮）
+  function renderNeteasePlaylistList(content, list) {
+    var html = '<div style="text-align:right;padding:4px 8px;font-size:11px;color:rgba(255,255,255,0.5);"><a href="javascript:void(0)" class="rmp-netease-refresh" style="color:#6cf;text-decoration:none;">刷新歌单</a></div>';
+    for (var i = 0; i < list.length; i++) {
+      var pl = list[i];
+      html += '<div class="rmp-island-pl-item" data-plid="' + pl.id + '">';
+      html += '<span class="rmp-pl-num">' + (i + 1) + '</span>';
+      html += '<span class="rmp-pl-name">' + escapeHtml(pl.name || '') + ' (' + (pl.trackCount || 0) + '首)</span>';
+      html += '<span class="rmp-pl-dot"></span>';
+      html += '</div>';
+    }
+    content.innerHTML = html;
+  }
+
+  // 点击网易云歌单后，在弹窗里展示歌单歌曲（带缓存），点击歌曲才加入播放列表并播放
+  // 不覆盖现有播放列表，保持播放列表和网易云歌单独立
   function loadNeteasePlaylistIntoPopup(plId) {
     var content = document.getElementById('rmp-island-popup-content');
+    var CACHE_TTL = 10 * 60 * 1000;
+    // 有缓存直接展示
+    if (STATE.islandPlaylistSongsCache[plId] && (Date.now() - STATE.islandPlaylistSongsCache[plId].time) < CACHE_TTL) {
+      renderNeteasePlaylistSongs(content, plId, STATE.islandPlaylistSongsCache[plId]);
+      return;
+    }
     if (content) content.innerHTML = '<div class="rmp-island-pl-loading"><div class="rmp-spinner"></div></div>';
     neteaseApi('/api/v6/playlist/detail?id=' + plId).then(function (resp) {
       var playlist = resp.playlist || {};
@@ -1627,7 +1693,7 @@
         if (content) content.innerHTML = '<div class="rmp-island-pl-loading">歌单为空</div>';
         return;
       }
-      // 转换为插件内部歌曲格式并加入播放列表
+      // 转换为插件内部歌曲格式
       var songs = tracks.map(function (t) {
         var ar = t.ar || t.artists || [];
         var al = t.al || t.album || {};
@@ -1640,19 +1706,32 @@
           _personal: true
         };
       });
-      // 替换当前播放列表
-      STATE.playlist = songs;
-      STATE.currentIndex = -1;
-      savePlaylist();
-      // 播放第一首
-      if (songs.length > 0) {
-        playSong(songs[0], 0);
-      }
-      hideIslandPlaylistPopup();
-      if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('已加载歌单：' + plName);
+      var cacheData = { songs: songs, name: plName, time: Date.now() };
+      STATE.islandPlaylistSongsCache[plId] = cacheData;
+      renderNeteasePlaylistSongs(content, plId, cacheData);
     }).catch(function () {
       if (content) content.innerHTML = '<div class="rmp-island-pl-loading">加载失败</div>';
     });
+  }
+
+  // 渲染歌单歌曲列表 DOM（含返回按钮、刷新按钮、歌曲列表）
+  function renderNeteasePlaylistSongs(content, plId, cacheData) {
+    var songs = cacheData.songs;
+    var plName = cacheData.name || '歌单';
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;font-size:11px;">';
+    html += '<a href="javascript:void(0)" class="rmp-netease-back" style="color:#6cf;text-decoration:none;">← 返回歌单</a>';
+    html += '<a href="javascript:void(0)" class="rmp-netease-refresh-songs" data-plid="' + plId + '" style="color:#6cf;text-decoration:none;">刷新</a>';
+    html += '</div>';
+    html += '<div style="padding:2px 8px 4px;font-size:11px;color:rgba(255,255,255,0.4);">' + escapeHtml(plName) + ' · ' + songs.length + '首</div>';
+    for (var i = 0; i < songs.length; i++) {
+      var s = songs[i];
+      html += '<div class="rmp-island-pl-item"data-plsong="' + plId + ':' + i + '">';
+      html += '<span class="rmp-pl-num">' + (i + 1) + '</span>';
+      html += '<span class="rmp-pl-name">' + escapeHtml(s.name || '') + ' - ' + escapeHtml(s.artist || '') + '</span>';
+      html += '<span class="rmp-pl-dot"></span>';
+      html += '</div>';
+    }
+    content.innerHTML = html;
   }
 
   // 隐藏播放列表浮窗
