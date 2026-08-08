@@ -1,10 +1,10 @@
 {
   "id": "roche-music-player",
   "name": "网易云音乐",
-  "version": "3.4.6",
-  "description": "v3.4.6：修复切歌误弹请填cookie - 持久化_personal字段+兼容旧数据+静默竞态中断错误",
+  "version": "3.4.7",
+  "description": "v3.4.7：切歌提醒记录从哪首切到哪首 + 提示char自然聊聊切歌想法",
   "author": "Roche",
-  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@7af59ed/music-player.js",
+  "entry": "https://cdn.jsdelivr.net/gh/luyi90720-sys/roche-music-player@47b88f2/music-player.js",
   "hash": "",
   "permissions": ["storage", "ui", "memory:read"]
 }
