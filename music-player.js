@@ -25,7 +25,7 @@
   } catch (e) {}
 
   // ==================== 全局状态 ====================
-  var BUILD_TIME = '2026-08-08-v3.4.5';
+  var BUILD_TIME = '2026-08-08-v3.4.6';
   var STATE = {
     roche: null,              // roche API 实例
     audio: null,              // 单个 HTMLAudioElement 实例
@@ -568,8 +568,9 @@
 
     // 获取播放 URL（仅网易云个人账号音源）
     var urlPromise;
-    if (song._personal && STATE.cookie) {
-      urlPromise = getSongUrl(song.id, 'netease', undefined, song._personal);
+    // 检查 cookie：_personal 默认 true（当前所有音源均为网易云个人，兼容旧持久化数据中丢失的 _personal 字段）
+    if (STATE.cookie) {
+      urlPromise = getSongUrl(song.id, 'netease', undefined, song._personal !== false);
     } else {
       if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('请先在设置中填写网易云 Cookie');
       return;
@@ -590,10 +591,13 @@
         playPromise.then(function () {
           console.log('[playSong] 个人网易云 流式播放 resolve 成功');
         }).catch(function (e) {
-          console.error('[playSong] 个人网易云 play() reject:', e && e.message ? e.message : e);
+          var msg = (e && e.message) ? e.message : String(e);
+          console.error('[playSong] 个人网易云 play() reject:', msg);
           // 未解锁时已在前面提示过，不再重复显示错误
           if (!STATE.audioUnlocked) return;
-          if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('播放失败: ' + (e.message || '未知错误'));
+          // 竞态中断：用户快速切歌时上一个 play() 被 new load 打断，属于正常现象，静默处理
+          if (msg.indexOf('interrupted') >= 0 || msg.indexOf('aborted') >= 0 || (e && e.name === 'AbortError')) return;
+          if (STATE.roche && STATE.roche.ui) STATE.roche.ui.toast('播放失败: ' + msg);
         });
       }
       // 加载歌词（使用 lyricId）
@@ -627,7 +631,7 @@
     var nextIdx = STATE.currentIndex + 1;
     if (nextIdx >= list.length) nextIdx = 0;
     var next = list[nextIdx];
-    if (!next || !(next._personal && STATE.cookie)) return;
+    if (!next || !STATE.cookie) return;
     var cleanId = String(next.id).indexOf(':') >= 0 ? String(next.id).split(':').pop() : String(next.id);
     var key = 'ne:' + cleanId;
     if (STATE.songUrlCache && STATE.songUrlCache[key]) return; // 已缓存
@@ -637,7 +641,7 @@
   // 加载歌词（使用 lyricId，一般与 track_id 相同）
   function loadLyrics(song) {
     var lyricId = song.lyricId || song.id;
-    getLyric(lyricId, 'netease', song._personal).then(function (data) {
+    getLyric(lyricId, 'netease', song._personal !== false).then(function (data) {
       STATE.lyrics = parseLrc(data.lyric);
       STATE.tlyrics = parseLrc(data.tlyric);
       renderAppLyrics();
@@ -794,7 +798,8 @@
           platform: s.platform,
           picId: s.picId,
           lyricId: s.lyricId,
-          duration: s.duration
+          duration: s.duration,
+          _personal: s._personal !== false ? true : false
         };
       });
       STATE.roche.storage.set('rmp_playlist', JSON.stringify(minimal));
@@ -4715,6 +4720,10 @@
         try {
           var saved = JSON.parse(results[8]);
           if (Array.isArray(saved) && saved.length > 0) {
+            // 兼容旧数据：_personal 字段在历史版本中未持久化，默认补 true（当前所有音源均为网易云个人）
+            saved.forEach(function (s) {
+              if (s._personal === undefined) s._personal = true;
+            });
             STATE.playlist = saved;
           }
         } catch (e) {}
